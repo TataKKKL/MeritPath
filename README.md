@@ -27,3 +27,5 @@ More information such as citer names, citer emails, and citers' locations (since
 While the CSV file can be used to create an AI agent for automatically generating and sending cold call emails to potential recommenders, I took a different approach for my applications. I chose to review each recommender's profile individually and add personal touches to each email.
 
 However, if you're short on time and want to reach out to as many recommenders as possible, you can leverage the CSV file with an AI agent or workflow to automate email generation.
+
+## Step 4: Use AI to facilitate petition letter preparation

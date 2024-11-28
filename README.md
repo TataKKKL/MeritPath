@@ -1,7 +1,10 @@
 # EB1_scripts
-In this repo, I share my scripts for Extraordinary Ability Green Card (EB-1A/EB-1B) applications. One important step of the EB-1A and EB-1B application process is obtaining recommendation letters from independent recommenders—people you don't know personally and have never coauthored papers with. While some people attend conferences to connect with potential recommenders, I chose to reach out directly to researchers who have cited my papers by sending cold emails requesting recommendation letters. To get started, you need to compile a list of potential recommenders and gather content for your cold email outreach. Here, I would like to share some scripts I used for this process.
+In this repo, I share my scripts for Extraordinary Ability Green Card (EB-1A/EB-1B) applications. 
 
-I would like to share my cold call statistics: I sent 94 cold call emails for my EB-1A application. Eight researchers rejected my requests, nine researchers accepted them, and the remaining 77 researchers did not reply. I lost the detailed cold call statistics for my EB-1B application since I was using my work email.
+One important step of the EB-1A and EB-1B application process is obtaining recommendation letters from independent recommenders—people you don't know personally and have never coauthored papers with. While some people attend conferences to connect with potential recommenders, I chose to reach out directly to researchers who have cited my papers by sending cold emails requesting recommendation letters. To get started, you need to compile a list of potential recommenders and gather content for your cold email outreach. Here, I would like to share some scripts I used for this process. I would like to share my cold call statistics: I sent 94 cold call emails for my EB-1A application. Eight researchers rejected my requests, nine researchers accepted them, and the remaining 77 researchers did not reply. I lost the detailed cold call statistics for my EB-1B application since I was using my work email.
+
+The next step involves preparing a detailed petition letter that showcases your research accomplishments.
+
 
 ## Step 1: Find my citers
 

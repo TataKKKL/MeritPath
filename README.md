@@ -22,13 +22,17 @@ Based on this information, I can identify recommenders who best fit my EB-1B and
 
 Using the CSV file, I can generate cold call emails with detailed information about each potential recommender.
 
-## Step 2: Enrich citers information [TODO]
-More information such as citer names, citer emails, and citers' locations (since EB1A requires global recognition, making it important to find citers from different continents) could be added by modifying the script to call other APIs.
+## Step 2: Enrich Citer Information [TODO]
 
-## Step 3: Automation tool [TODO]
+Additional information such as citer names, emails, and locations can be added by modifying the script to call other APIs. Location data is particularly important for EB1A applications, which require demonstrating global recognition through citations from different continents.
+
+Use AI to analyze citation highlights and determine whether they are positive or negative. Based on this enriched information, filter the list of citers.
+
+
+## Step 3: Automation tool for cold outreach [TODO]
 
 While the CSV file can be used to create an AI agent for automatically generating and sending cold call emails to potential recommenders, I took a different approach for my applications. I chose to review each recommender's profile individually and add personal touches to each email.
 
 However, if you're short on time and want to reach out to as many recommenders as possible, you can leverage the CSV file with an AI agent or workflow to automate email generation.
 
-## Step 4: Use AI to facilitate petition letter preparation [TODO]
+

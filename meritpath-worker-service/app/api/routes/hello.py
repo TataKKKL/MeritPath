@@ -9,4 +9,4 @@ hello_controller = HelloController()
 
 @router.get("", include_in_schema=True)
 async def get_hello():
-    return hello_controller.get_hello()
+    return await hello_controller.get_hello()

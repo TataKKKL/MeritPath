@@ -1,3 +1,3 @@
 class HelloService:
-    def get_hello_data(self):
+    async def get_hello_data(self):
         return {"name": "John Doe"}

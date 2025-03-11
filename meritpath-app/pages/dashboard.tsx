@@ -12,7 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ReloadIcon, MagnifyingGlassIcon } from "@radix-ui/react-icons";
+import { ReloadIcon, MagnifyingGlassIcon, DownloadIcon } from "@radix-ui/react-icons";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface CitationData {
@@ -31,6 +31,10 @@ export default function Dashboard() {
   const [searchText, setSearchText] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [sortConfig, setSortConfig] = useState<{
+    key: keyof CitationData;
+    direction: 'ascending' | 'descending';
+  } | null>(null);
 
   // Generate mock data
   useEffect(() => {
@@ -58,26 +62,37 @@ export default function Dashboard() {
       item.citedPapers.toLowerCase().includes(searchText.toLowerCase())
   );
 
+  // Apply sorting to data
+  const sortedData = React.useMemo(() => {
+    const sortableData = [...filteredData];
+    if (sortConfig !== null) {
+      sortableData.sort((a, b) => {
+        if (typeof a[sortConfig.key] === 'string') {
+          return sortConfig.direction === 'ascending'
+            ? (a[sortConfig.key] as string).localeCompare(b[sortConfig.key] as string)
+            : (b[sortConfig.key] as string).localeCompare(a[sortConfig.key] as string);
+        }
+        return sortConfig.direction === 'ascending'
+          ? (a[sortConfig.key] as number) - (b[sortConfig.key] as number)
+          : (b[sortConfig.key] as number) - (a[sortConfig.key] as number);
+      });
+    }
+    return sortableData;
+  }, [filteredData, sortConfig]);
+
   // Sort data by a given key
-  const sortData = (key: keyof CitationData, ascending: boolean) => {
-    const sortedData = [...data].sort((a, b) => {
-      if (typeof a[key] === 'string') {
-        return ascending 
-          ? (a[key] as string).localeCompare(b[key] as string) 
-          : (b[key] as string).localeCompare(a[key] as string);
-      }
-      return ascending 
-        ? (a[key] as number) - (b[key] as number) 
-        : (b[key] as number) - (a[key] as number);
-    });
-    
-    setData(sortedData);
+  const requestSort = (key: keyof CitationData) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
   };
 
   // Calculate pagination values
-  const totalPages = Math.ceil(filteredData.length / pageSize);
+  const totalPages = Math.ceil(sortedData.length / pageSize);
   const startIndex = (currentPage - 1) * pageSize;
-  const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
+  const paginatedData = sortedData.slice(startIndex, startIndex + pageSize);
   
   // Handle pagination
   const nextPage = () => {
@@ -90,6 +105,59 @@ export default function Dashboard() {
     if (currentPage > 1) {
       setCurrentPage(currentPage - 1);
     }
+  };
+
+  // Function to export data as CSV
+  const exportToCSV = () => {
+    // Use the currently sorted data
+    const dataToExport = sortedData;
+    
+    // Define CSV headers
+    const headers = [
+      'Rank',
+      'Citing Author',
+      'Author ID',
+      'Total Citations',
+      'Author Paper Count',
+      'Cited Papers and Citing Papers'
+    ];
+    
+    // Convert data to CSV format
+    const csvData = dataToExport.map(item => [
+      item.rank,
+      item.citingAuthor,
+      item.authorId,
+      item.totalCitations,
+      item.paperCount,
+      item.citedPapers
+    ]);
+    
+    // Combine headers and data
+    const csvContent = [
+      headers.join(','),
+      ...csvData.map(row => row.join(','))
+    ].join('\n');
+    
+    // Create a Blob with the CSV data
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    // Create a URL for the Blob
+    const url = URL.createObjectURL(blob);
+    
+    // Create a temporary link element
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'citation_data.csv');
+    
+    // Append the link to the document
+    document.body.appendChild(link);
+    
+    // Trigger the download
+    link.click();
+    
+    // Clean up
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -138,17 +206,46 @@ export default function Dashboard() {
                   </>
                 )}
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exportToCSV}
+                disabled={loading || sortedData.length === 0}
+              >
+                <DownloadIcon className="mr-2 h-4 w-4" />
+                Export CSV
+              </Button>
             </div>
             
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[80px] cursor-pointer" onClick={() => sortData('rank', true)}>Rank</TableHead>
-                    <TableHead className="cursor-pointer" onClick={() => sortData('citingAuthor', true)}>Citing Author</TableHead>
+                    <TableHead 
+                      className="w-[80px] cursor-pointer" 
+                      onClick={() => requestSort('rank')}
+                    >
+                      Rank {sortConfig?.key === 'rank' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer" 
+                      onClick={() => requestSort('citingAuthor')}
+                    >
+                      Citing Author {sortConfig?.key === 'citingAuthor' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                    </TableHead>
                     <TableHead>Author ID</TableHead>
-                    <TableHead className="cursor-pointer" onClick={() => sortData('totalCitations', false)}>Total Citations</TableHead>
-                    <TableHead className="cursor-pointer" onClick={() => sortData('paperCount', false)}>Author Paper Count</TableHead>
+                    <TableHead 
+                      className="cursor-pointer" 
+                      onClick={() => requestSort('totalCitations')}
+                    >
+                      Total Citations {sortConfig?.key === 'totalCitations' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer" 
+                      onClick={() => requestSort('paperCount')}
+                    >
+                      Author Paper Count {sortConfig?.key === 'paperCount' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                    </TableHead>
                     <TableHead className="max-w-[200px]">Cited Papers and Citing Papers</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -159,7 +256,7 @@ export default function Dashboard() {
                         Loading data...
                       </TableCell>
                     </TableRow>
-                  ) : filteredData.length === 0 ? (
+                  ) : sortedData.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="h-24 text-center">
                         No results found.
@@ -181,12 +278,12 @@ export default function Dashboard() {
                   )}
                 </TableBody>
                 <TableCaption>
-                  {!loading && filteredData.length > 0 && (
+                  {!loading && sortedData.length > 0 && (
                     <div className="flex justify-between text-sm">
-                      <span>Showing {Math.min(pageSize, filteredData.length - startIndex)} of {filteredData.length} entries</span>
+                      <span>Showing {Math.min(pageSize, sortedData.length - startIndex)} of {sortedData.length} entries</span>
                       <span>
-                        Total Citations: {filteredData.reduce((sum, item) => sum + item.totalCitations, 0)} | 
-                        Total Papers: {filteredData.reduce((sum, item) => sum + item.paperCount, 0)}
+                        Total Citations: {sortedData.reduce((sum, item) => sum + item.totalCitations, 0)} | 
+                        Total Papers: {sortedData.reduce((sum, item) => sum + item.paperCount, 0)}
                       </span>
                     </div>
                   )}
@@ -195,7 +292,7 @@ export default function Dashboard() {
             </div>
             
             {/* Updated pagination */}
-            {filteredData.length > 0 && (
+            {sortedData.length > 0 && (
               <div className="flex items-center justify-end space-x-2 py-4">
                 <div className="flex-1 text-sm text-muted-foreground">
                   Page {currentPage} of {totalPages}

@@ -55,7 +55,7 @@ jobs:
           --task-definition $ECS_TASK_DEFINITION \
           --query 'taskDefinition.taskDefinitionArn' \
           --output text)
-        echo "::set-output name=arn::$TASK_DEFINITION"
+        echo "arn=$TASK_DEFINITION" >> $GITHUB_OUTPUT
         echo "Using task definition: $TASK_DEFINITION"
     
     - name: Deploy to Amazon ECS

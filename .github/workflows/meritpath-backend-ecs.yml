@@ -1,42 +1,37 @@
 name: meritpath-backend-service Deploy to Amazon ECS
-
 on:
   push:
     branches: [ "main" ] 
-    paths:
-      - 'meritpath-backend/**' 
   workflow_dispatch:
-
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: meritpath-backend
   ECS_CLUSTER: fargate-cluster
   ECS_SERVICE: meritpath-backend-service
+  ECS_TASK_DEFINITION: meritpath-backend-service
   
 permissions:
   contents: read
-
 jobs:
   deploy:
     name: Deploy to ECS
-    runs-on: ubuntu-latest  # Changed from arm64-latest to ubuntu-latest
+    runs-on: ubuntu-latest
     environment: production
-
     steps:
     - name: Checkout
       uses: actions/checkout@v3
-
+      
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
+      uses: aws-actions/configure-aws-credentials@v2
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
-
+        
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
-
+      
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
       
@@ -48,7 +43,38 @@ jobs:
         docker buildx build --platform linux/arm64 \
           --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
           --push ./meritpath-backend
-
-    - name: Force new deployment of ECS service
+          
+    - name: Get all task definition revisions
+      id: get-task-revisions
       run: |
-        aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_SERVICE }} --force-new-deployment
+        # Get all active revision numbers
+        REVISIONS=$(aws ecs list-task-definitions \
+          --family-prefix ${{ env.ECS_TASK_DEFINITION }} \
+          --status ACTIVE \
+          --query 'taskDefinitionArns[*]' \
+          --output text)
+        
+        # Find the latest revision number
+        LATEST_REVISION=0
+        LATEST_ARN=""
+        
+        for ARN in $REVISIONS; do
+          # Extract revision number from ARN
+          REV=$(echo $ARN | grep -o '[0-9]*$')
+          
+          if [ $REV -gt $LATEST_REVISION ]; then
+            LATEST_REVISION=$REV
+            LATEST_ARN=$ARN
+          fi
+        done
+        
+        echo "taskdef_arn=$LATEST_ARN" >> $GITHUB_OUTPUT
+        echo "Using absolutely latest task definition: $LATEST_ARN (revision $LATEST_REVISION)"
+
+    - name: Deploy with confirmed latest task definition
+      run: |
+        aws ecs update-service \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --service ${{ env.ECS_SERVICE }} \
+          --task-definition ${{ steps.get-task-revisions.outputs.taskdef_arn }} \
+          --force-new-deployment

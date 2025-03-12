@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ReloadIcon, MagnifyingGlassIcon, DownloadIcon } from "@radix-ui/react-icons";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { GetServerSidePropsContext } from 'next';
 
 interface CitationData {
   key: string;
@@ -25,7 +26,19 @@ interface CitationData {
   citedPapers: string;
 }
 
-export default function Dashboard() {
+// Add a User interface for type safety
+interface User {
+  id: string;
+  name: string;
+  // Add other user properties as needed
+}
+
+// Add props type for the component
+interface DashboardProps {
+  user: User;
+}
+
+export default function Dashboard({ user }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<CitationData[]>([]);
   const [searchText, setSearchText] = useState("");
@@ -167,7 +180,12 @@ export default function Dashboard() {
       </Head>
       
       <div className="container mx-auto py-10 space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight">All Your Citers</h1>
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold tracking-tight">All Your Citers</h1>
+          <div className="text-sm text-muted-foreground">
+            Logged in as: {user.name}
+          </div>
+        </div>
         
         <Card>
           <CardHeader>
@@ -338,4 +356,38 @@ export default function Dashboard() {
       </div>
     </>
   );
+}
+
+// Add getServerSideProps to check authentication on each request
+export async function getServerSideProps(context: GetServerSidePropsContext) {
+  // Get the session or token from cookies
+  const projectRef = process.env.NEXT_PUBLIC_SUPABASE_PROJECT_REF || process.env.SUPABASE_PROJECT_ID;
+  const cookieName = `sb-${projectRef}-auth-token`;
+
+  console.log('[getServerSideProps] Looking for cookie:', cookieName);
+  console.log('[getServerSideProps] Cookie value:', context.req.cookies[cookieName]);
+
+  const token = context.req.cookies[cookieName];
+  console.log('[getServerSideProps] Token:', token);
+  
+  // If no token exists, redirect to login
+  if (!token) {
+    return {
+      redirect: {
+        destination: '/login',
+        permanent: false,
+      },
+    };
+  }
+  
+  // Since we're using mocked data and not pulling anything from the backend,
+  // we just provide a mock user object
+  return {
+    props: {
+      user: {
+        id: '123',
+        name: 'John Researcher',
+      },
+    },
+  };
 }

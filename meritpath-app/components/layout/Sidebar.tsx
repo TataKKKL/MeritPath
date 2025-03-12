@@ -42,6 +42,12 @@ export default function Sidebar() {
               <span>Finalize Your Citers</span>
             </Link>
           </li>
+          <li>
+            <Link href="/login" className={`flex items-center px-4 py-2 rounded-md hover:bg-foreground/5 ${isActive("/login")}`}>
+              <span className="mr-3">📊</span>
+              <span>Login</span>
+            </Link>
+          </li>
         </ul>
       </nav>
     </div>

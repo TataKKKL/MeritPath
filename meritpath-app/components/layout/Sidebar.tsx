@@ -30,6 +30,12 @@ export default function Sidebar() {
               <span>Dashboard</span>
             </Link>
           </li>
+          <li>
+            <Link href="/citers" className={`flex items-center px-4 py-2 rounded-md hover:bg-foreground/5 ${isActive("/citers")}`}>
+              <span className="mr-3">📊</span>
+              <span>Citers</span>
+            </Link>
+          </li>
         </ul>
       </nav>
     </div>

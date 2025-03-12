@@ -4,3 +4,4 @@ websockets>=11.0.3
 python-dotenv>=1.0.0
 supabase>=1.0.3
 httpx>=0.24.1
+boto3>=1.28.0

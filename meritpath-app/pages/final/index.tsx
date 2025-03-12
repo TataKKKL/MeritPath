@@ -110,7 +110,7 @@ export default function Citers() {
       </Head>
       
       <div className="container mx-auto py-10 space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight">Shortlist Potential Citers</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Finalize Your Citers</h1>
         
         <Card>
           <CardHeader>

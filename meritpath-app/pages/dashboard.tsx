@@ -163,11 +163,11 @@ export default function Dashboard() {
   return (
     <>
       <Head>
-        <title>Citation Dashboard</title>
+        <title>All Your Citers</title>
       </Head>
       
       <div className="container mx-auto py-10 space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight">Citation Dashboard</h1>
+        <h1 className="text-3xl font-bold tracking-tight">All Your Citers</h1>
         
         <Card>
           <CardHeader>

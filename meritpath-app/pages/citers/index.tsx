@@ -12,39 +12,38 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MagnifyingGlassIcon} from "@radix-ui/react-icons";
+import { MagnifyingGlassIcon } from "@radix-ui/react-icons";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Link from "next/link";
 
 interface CiterData {
   id: string;
   name: string;
-  status: "not started" | "pending" | "finished" ;
   university: string;
   totalCitations: number;
 }
 
 // Sample data for the citers table
 const sampleCiters: CiterData[] = [
-  { id: "1", name: "Dr. Sarah Johnson", status: "not started", university: "Stanford University", totalCitations: 342 },
-  { id: "2", name: "Prof. Michael Chen", status: "not started", university: "MIT", totalCitations: 287 },
-  { id: "3", name: "Dr. Emily Rodriguez", status: "not started", university: "University of California, Berkeley", totalCitations: 215 },
-  { id: "4", name: "Prof. David Kim", status: "not started", university: "Harvard University", totalCitations: 198 },
-  { id: "5", name: "Dr. Lisa Wang", status: "not started", university: "University of Oxford", totalCitations: 176 },
-  { id: "6", name: "Prof. James Wilson", status: "not started", university: "ETH Zurich", totalCitations: 163 },
-  { id: "7", name: "Dr. Sophia Patel", status: "not started", university: "University of Cambridge", totalCitations: 154 },
-  { id: "8", name: "Prof. Robert Garcia", status: "not started", university: "University of Tokyo", totalCitations: 142 },
-  { id: "9", name: "Dr. Olivia Martinez", status: "not started", university: "National University of Singapore", totalCitations: 137 },
-  { id: "10", name: "Prof. Thomas Lee", status: "not started", university: "University of Toronto", totalCitations: 129 },
-  { id: "11", name: "Dr. Emma Brown", status: "not started", university: "Imperial College London", totalCitations: 118 },
-  { id: "12", name: "Prof. Daniel Smith", status: "not started", university: "Tsinghua University", totalCitations: 112 },
-  { id: "13", name: "Dr. Ava Williams", status: "not started", university: "University of Michigan", totalCitations: 105 },
-  { id: "14", name: "Prof. Alexander Davis", status: "not started", university: "Technical University of Munich", totalCitations: 98 },
-  { id: "15", name: "Dr. Natalie Taylor", status: "not started", university: "University of Edinburgh", totalCitations: 92 },
+  { id: "1", name: "Dr. Sarah Johnson", university: "Stanford University", totalCitations: 342 },
+  { id: "2", name: "Prof. Michael Chen", university: "MIT", totalCitations: 287 },
+  { id: "3", name: "Dr. Emily Rodriguez", university: "University of California, Berkeley", totalCitations: 215 },
+  { id: "4", name: "Prof. David Kim", university: "Harvard University", totalCitations: 198 },
+  { id: "5", name: "Dr. Lisa Wang", university: "University of Oxford", totalCitations: 176 },
+  { id: "6", name: "Prof. James Wilson", university: "ETH Zurich", totalCitations: 163 },
+  { id: "7", name: "Dr. Sophia Patel", university: "University of Cambridge", totalCitations: 154 },
+  { id: "8", name: "Prof. Robert Garcia", university: "University of Tokyo", totalCitations: 142 },
+  { id: "9", name: "Dr. Olivia Martinez", university: "National University of Singapore", totalCitations: 137 },
+  { id: "10", name: "Prof. Thomas Lee", university: "University of Toronto", totalCitations: 129 },
+  { id: "11", name: "Dr. Emma Brown", university: "Imperial College London", totalCitations: 118 },
+  { id: "12", name: "Prof. Daniel Smith", university: "Tsinghua University", totalCitations: 112 },
+  { id: "13", name: "Dr. Ava Williams", university: "University of Michigan", totalCitations: 105 },
+  { id: "14", name: "Prof. Alexander Davis", university: "Technical University of Munich", totalCitations: 98 },
+  { id: "15", name: "Dr. Natalie Taylor", university: "University of Edinburgh", totalCitations: 92 },
 ];
 
 export default function Citers() {
   const [searchText, setSearchText] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [sortConfig, setSortConfig] = useState<{
@@ -52,12 +51,11 @@ export default function Citers() {
     direction: 'ascending' | 'descending';
   } | null>({ key: 'totalCitations', direction: 'descending' });
 
-  // Filter data based on search text and status
+  // Filter data based on search text
   const filteredData = sampleCiters.filter(
     item =>
-      (item.name.toLowerCase().includes(searchText.toLowerCase()) ||
-       item.university.toLowerCase().includes(searchText.toLowerCase())) &&
-      (!statusFilter || item.status === statusFilter)
+      item.name.toLowerCase().includes(searchText.toLowerCase()) ||
+      item.university.toLowerCase().includes(searchText.toLowerCase())
   );
 
   // Apply sorting to data
@@ -130,21 +128,6 @@ export default function Citers() {
                   onChange={(e) => setSearchText(e.target.value)}
                 />
               </div>
-              
-              <Select
-                value={statusFilter || "all"}
-                onValueChange={(value) => setStatusFilter(value === "all" ? null : value)}
-              >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  <SelectItem value="not started">Not Started</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="finished">Finished</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
             
             <div className="rounded-md border">
@@ -159,12 +142,6 @@ export default function Citers() {
                     </TableHead>
                     <TableHead 
                       className="cursor-pointer" 
-                      onClick={() => requestSort('status')}
-                    >
-                      Status {sortConfig?.key === 'status' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                    </TableHead>
-                    <TableHead 
-                      className="cursor-pointer" 
                       onClick={() => requestSort('university')}
                     >
                       University {sortConfig?.key === 'university' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
@@ -175,6 +152,7 @@ export default function Citers() {
                     >
                       Total Citations {sortConfig?.key === 'totalCitations' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
                     </TableHead>
+                    <TableHead className="w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -188,18 +166,13 @@ export default function Citers() {
                     paginatedData.map((item) => (
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell>
-                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                            item.status === 'not started' ? 'bg-gray-100 text-gray-800' :
-                            item.status === 'pending' ? 'bg-blue-100 text-blue-800' :
-                            item.status === 'finished' ? 'bg-green-100 text-green-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-                          </span>
-                        </TableCell>
                         <TableCell>{item.university}</TableCell>
                         <TableCell className="text-right">{item.totalCitations}</TableCell>
+                        <TableCell>
+                          <Link href={`/citers/${item.id}`}>
+                            <Button variant="outline" size="sm">View Details</Button>
+                          </Link>
+                        </TableCell>
                       </TableRow>
                     ))
                   )}

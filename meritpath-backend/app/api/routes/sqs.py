@@ -12,4 +12,5 @@ async def send_test_job(end_number: int = Query(None, description="Optional end 
     """
     Send a test job to the SQS queue
     """
-    return await sqs_controller.send_test_job(end_number) 
+    result = await sqs_controller.send_test_job(end_number)
+    return result 

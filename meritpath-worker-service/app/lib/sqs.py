@@ -81,28 +81,31 @@ class SQSClient:
             logger.error(f"Error sending message to SQS task queue: {str(e)}")
             return None
     
-    async def send_result_message(self, message_body, message_attributes=None):
-        """
-        Send a result message to the results queue
-        """
-        try:
-            if not self.results_queue_url:
-                logger.error("Results queue URL not configured")
-                return None
-                
-            if isinstance(message_body, dict):
-                message_body = json.dumps(message_body)
-                
-            message_params = {
-                'QueueUrl': self.results_queue_url,
-                'MessageBody': message_body
-            }
-            
-            if message_attributes:
-                message_params['MessageAttributes'] = message_attributes
-                
-            response = self.sqs.send_message(**message_params)
-            return response.get('MessageId')
-        except Exception as e:
-            logger.error(f"Error sending result message to SQS results queue: {str(e)}")
-            return None 
+    # You can remove or comment out the send_result_message method
+    # and the SQS_RESULTS_QUEUE_URL environment variable check
+    
+    # async def send_result_message(self, message_body, message_attributes=None):
+    #     """
+    #     Send a result message to the results queue
+    #     """
+    #     try:
+    #         if not self.results_queue_url:
+    #             logger.error("Results queue URL not configured")
+    #             return None
+    #             
+    #         if isinstance(message_body, dict):
+    #             message_body = json.dumps(message_body)
+    #             
+    #         message_params = {
+    #             'QueueUrl': self.results_queue_url,
+    #             'MessageBody': message_body
+    #         }
+    #         
+    #         if message_attributes:
+    #             message_params['MessageAttributes'] = message_attributes
+    #             
+    #         response = self.sqs.send_message(**message_params)
+    #         return response.get('MessageId')
+    #     except Exception as e:
+    #         logger.error(f"Error sending result message to SQS results queue: {str(e)}")
+    #         return None 

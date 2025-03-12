@@ -1,8 +1,8 @@
-name: Deploy to Amazon ECS
+name: meritpath-backend-service Deploy to Amazon ECS
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main" ] 
   workflow_dispatch:
 
 env:
@@ -10,31 +10,31 @@ env:
   ECR_REPOSITORY: meritpath-backend
   ECS_CLUSTER: fargate-cluster
   ECS_SERVICE: meritpath-backend-service
-  ECS_TASK_DEFINITION: meritpath-backend-service
-
+  
 permissions:
   contents: read
 
 jobs:
   deploy:
     name: Deploy to ECS
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Changed from arm64-latest to ubuntu-latest
     environment: production
+
     steps:
     - name: Checkout
       uses: actions/checkout@v3
-      
+
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
+      uses: aws-actions/configure-aws-credentials@v1
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
-        
+
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
-      
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
       
@@ -46,22 +46,7 @@ jobs:
         docker buildx build --platform linux/arm64 \
           --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
           --push ./meritpath-backend
-          
-    - name: Get latest task definition
-      id: task-def
+
+    - name: Force new deployment of ECS service
       run: |
-        # Get the latest task definition revision
-        TASK_DEFINITION=$(aws ecs describe-task-definition \
-          --task-definition $ECS_TASK_DEFINITION \
-          --query 'taskDefinition.taskDefinitionArn' \
-          --output text)
-        echo "arn=$TASK_DEFINITION" >> $GITHUB_OUTPUT
-        echo "Using task definition: $TASK_DEFINITION"
-    
-    - name: Deploy to Amazon ECS
-      run: |
-        aws ecs update-service \
-          --cluster $ECS_CLUSTER \
-          --service $ECS_SERVICE \
-          --task-definition ${{ steps.task-def.outputs.arn }} \
-          --force-new-deployment
+        aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_SERVICE }} --force-new-deployment

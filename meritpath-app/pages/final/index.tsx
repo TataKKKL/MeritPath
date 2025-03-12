@@ -29,17 +29,7 @@ const sampleCiters: CiterData[] = [
   { id: "2", name: "Prof. Michael Chen", university: "MIT", totalCitations: 287 },
   { id: "3", name: "Dr. Emily Rodriguez", university: "University of California, Berkeley", totalCitations: 215 },
   { id: "4", name: "Prof. David Kim", university: "Harvard University", totalCitations: 198 },
-  { id: "5", name: "Dr. Lisa Wang", university: "University of Oxford", totalCitations: 176 },
-  { id: "6", name: "Prof. James Wilson", university: "ETH Zurich", totalCitations: 163 },
-  { id: "7", name: "Dr. Sophia Patel", university: "University of Cambridge", totalCitations: 154 },
-  { id: "8", name: "Prof. Robert Garcia", university: "University of Tokyo", totalCitations: 142 },
-  { id: "9", name: "Dr. Olivia Martinez", university: "National University of Singapore", totalCitations: 137 },
-  { id: "10", name: "Prof. Thomas Lee", university: "University of Toronto", totalCitations: 129 },
-  { id: "11", name: "Dr. Emma Brown", university: "Imperial College London", totalCitations: 118 },
-  { id: "12", name: "Prof. Daniel Smith", university: "Tsinghua University", totalCitations: 112 },
-  { id: "13", name: "Dr. Ava Williams", university: "University of Michigan", totalCitations: 105 },
-  { id: "14", name: "Prof. Alexander Davis", university: "Technical University of Munich", totalCitations: 98 },
-  { id: "15", name: "Dr. Natalie Taylor", university: "University of Edinburgh", totalCitations: 92 },
+  { id: "5", name: "Dr. Lisa Wang", university: "University of Oxford", totalCitations: 176 }
 ];
 
 export default function Citers() {

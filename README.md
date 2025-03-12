@@ -20,3 +20,7 @@
 ## MeritPath Backend
 
 ## MeritPath Worker Service
+
+## SQS
+
+## Supabase Subscriptions

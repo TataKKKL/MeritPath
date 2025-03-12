@@ -1,4 +1,4 @@
-name: Deploy to Amazon ECS
+name: meritpath-backend-service Deploy to Amazon ECS
 
 on:
   push:

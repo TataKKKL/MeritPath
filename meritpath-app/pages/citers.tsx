@@ -12,7 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MagnifyingGlassIcon, DownloadIcon } from "@radix-ui/react-icons";
+import { MagnifyingGlassIcon} from "@radix-ui/react-icons";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface CiterData {
@@ -105,38 +105,6 @@ export default function Citers() {
     }
   };
 
-  // Function to export data as CSV
-  const exportToCSV = () => {
-    const headers = [
-      'Name',
-      'Status',
-      'University',
-      'Total Citations'
-    ];
-    
-    const csvData = sortedData.map(item => [
-      item.name,
-      item.status,
-      item.university,
-      item.totalCitations
-    ]);
-    
-    const csvContent = [
-      headers.join(','),
-      ...csvData.map(row => row.join(','))
-    ].join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'citers_data.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <>
       <Head>
@@ -177,17 +145,6 @@ export default function Citers() {
                   <SelectItem value="finished">Finished</SelectItem>
                 </SelectContent>
               </Select>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportToCSV}
-                disabled={sortedData.length === 0}
-                className="w-full sm:w-auto"
-              >
-                <DownloadIcon className="mr-2 h-4 w-4" />
-                Export CSV
-              </Button>
             </div>
             
             <div className="rounded-md border">
@@ -234,8 +191,8 @@ export default function Citers() {
                         <TableCell>
                           <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
                             item.status === 'not started' ? 'bg-gray-100 text-gray-800' :
-                            item.status === 'contacted' ? 'bg-blue-100 text-blue-800' :
-                            item.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                            item.status === 'pending' ? 'bg-blue-100 text-blue-800' :
+                            item.status === 'finished' ? 'bg-green-100 text-green-800' :
                             'bg-red-100 text-red-800'
                           }`}>
                             {item.status.charAt(0).toUpperCase() + item.status.slice(1)}

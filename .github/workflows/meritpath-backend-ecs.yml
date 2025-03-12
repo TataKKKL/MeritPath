@@ -3,6 +3,8 @@ name: meritpath-backend-service Deploy to Amazon ECS
 on:
   push:
     branches: [ "main" ] 
+    paths:
+      - 'meritpath-backend/**' 
   workflow_dispatch:
 
 env:

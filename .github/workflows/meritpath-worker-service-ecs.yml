@@ -3,6 +3,8 @@ name: meritpath-worker-service Deploy to Amazon ECS
 on:
   push:
     branches: [ "main" ] 
+    paths:
+      - 'meritpath-worker-service/**' 
   workflow_dispatch:
 
 env:

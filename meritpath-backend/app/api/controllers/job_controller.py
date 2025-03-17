@@ -4,12 +4,18 @@ from app.lib.supabase import supabase
 logger = logging.getLogger(__name__)
 
 class JobController:
-    async def get_job_result(self, job_id):
+    async def get_job_result(self, job_id, user_id=None):
         """
         Get job result from Supabase
         """
         try:
-            response = supabase.table("job_results").select("*").eq("job_id", job_id).execute()
+            query = supabase.table("job_results").select("*").eq("job_id", job_id)
+            
+            # If user_id is provided, filter by user_id as well
+            if user_id:
+                query = query.eq("user_id", user_id)
+                
+            response = query.execute()
             
             if hasattr(response, 'error') and response.error:
                 logger.error(f"Error retrieving job result: {response.error}")

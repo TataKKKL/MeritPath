@@ -8,6 +8,14 @@ import { withServerPropsAuth, makeServerPropsAuthRequest } from '@/utils/auth/au
 import { makeApiAuthRequest } from '@/utils/auth/authApiHandler';
 
 
+// Define a Paper type
+interface Paper {
+  url: string;
+  year: number;
+  title: string;
+  paperId: string;
+}
+
 // Define a proper type for the user profile
 interface UserProfile {
   id: string;
@@ -16,7 +24,7 @@ interface UserProfile {
   email?: string;
   influential_citation_count?: number;
   author_paper_count?: number;
-  papers?: string[]; // Changed from any[] to string[]
+  papers?: Paper[];
   created_at?: string;
 }
 
@@ -76,9 +84,47 @@ const Home = ({ user, userProfile }: HomeProps) => {
           </p>
           
           {profile?.semantic_scholar_id && (
-            <p className="text-black dark:text-white text-lg mb-4">
-              Semantic Scholar ID: {profile.semantic_scholar_id}
-            </p>
+            <div className="mb-8">
+              <p className="text-black dark:text-white text-lg mb-4">
+                Name: {profile.name}
+              </p>
+              <p className="text-black dark:text-white text-lg mb-4">
+                Semantic Scholar ID: {profile.semantic_scholar_id}
+              </p>
+              
+              {profile.papers && profile.papers.length > 0 && (
+                <div className="mt-6">
+                  <h2 className="text-black dark:text-white text-2xl mb-4">Your Papers</h2>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700">
+                      <thead>
+                        <tr className="bg-gray-100 dark:bg-gray-700">
+                          <th className="py-2 px-4 border-b text-left text-black dark:text-white">Title</th>
+                          <th className="py-2 px-4 border-b text-left text-black dark:text-white">Year</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {profile.papers.map((paper: Paper, index: number) => (
+                          <tr key={paper.paperId} className={index % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800' : 'bg-white dark:bg-gray-900'}>
+                            <td className="py-2 px-4 border-b text-black dark:text-white">
+                              <a 
+                                href={paper.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-blue-600 dark:text-blue-400 hover:underline"
+                              >
+                                {paper.title}
+                              </a>
+                            </td>
+                            <td className="py-2 px-4 border-b text-black dark:text-white">{paper.year}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           
           {/* Dialog to set Semantic Scholar ID */}

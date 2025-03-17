@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/utils/supabase/component";
+import { makeApiAuthRequest } from "@/utils/auth/authApiHandler";
 
 interface SemanticScholarIdDialogProps {
   open: boolean;
@@ -42,15 +43,22 @@ export default function SemanticScholarIdDialog({
     setError(null);
     
     try {
-      // Update the user's semantic_scholar_id directly in Supabase
-      const { error: updateError } = await supabase
-        .from("users")
-        .update({ semantic_scholar_id: semanticScholarId })
-        .eq("id", userId);
+      // Get the session which contains the access token
+      const { data: { session } } = await supabase.auth.getSession();
       
-      if (updateError) {
-        throw updateError;
+      if (!session?.access_token) {
+        throw new Error("No valid session found");
       }
+      
+      // Use makeApiAuthRequest with the correct endpoint
+      await makeApiAuthRequest(
+        session.access_token,
+        `/api/users/${userId}/semantic-scholar-id`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ semantic_scholar_id: semanticScholarId })
+        }
+      );
       
       onSuccess();
       onOpenChange(false);

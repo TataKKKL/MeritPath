@@ -5,6 +5,7 @@ import uuid
 from app.lib.sqs import SQSClient
 from app.api.services.number_printer_service import NumberPrinterService
 from app.api.services.supabase_service import SupabaseService
+from app.api.services.find_citer_service import FindCiterService
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,7 @@ class WorkerService:
         self.sqs_client = SQSClient()
         self.number_printer_service = NumberPrinterService()
         self.supabase_service = SupabaseService()
+        self.find_citer_service = FindCiterService()
         self.running = False
     
     async def start(self):
@@ -90,6 +92,18 @@ class WorkerService:
             if job_type == 'print_numbers':
                 end_number = job_params.get('end_number')
                 result = await self.number_printer_service.print_numbers(end_number)
+            elif job_type == 'find_citers':
+                # Handle the citation processing job
+                user_id = job_params.get('user_id')
+                
+                if not user_id:
+                    result = {
+                        "status": "failed", 
+                        "error": "Missing required parameter: user_id"
+                    }
+                else:
+                    # Process the citation job
+                    result = await self.find_citer_service.process_citation_job(user_id)
             else:
                 logger.warning(f"Unknown job type: {job_type}")
                 result = {"status": "failed", "error": f"Unknown job type: {job_type}"}

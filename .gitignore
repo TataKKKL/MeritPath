@@ -1,3 +1,5 @@
+meritpath-worker-service/test/test_prod_worker.sh
+meritpath-worker-service/test/test_local_worker.sh
 meritpath-worker-service/message.json
 .env
 __pycache__

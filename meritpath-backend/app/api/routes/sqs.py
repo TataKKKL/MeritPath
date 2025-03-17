@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Body, Path
+from typing import Dict, Any, Optional
+from pydantic import BaseModel
 from app.api.controllers.sqs_controller import SQSController
 
 router = APIRouter(
@@ -7,10 +9,39 @@ router = APIRouter(
 )
 sqs_controller = SQSController()
 
-@router.post("", include_in_schema=True)
-async def send_test_job(end_number: int = Query(None, description="Optional end number")):
+class JobRequest(BaseModel):
+    job_type: str
+    job_params: Optional[Dict[str, Any]] = None
+
+
+@router.post("/jobs", include_in_schema=True)
+async def send_job(job_request: JobRequest = Body(...)):
     """
-    Send a test job to the SQS queue
+    Send a job to the SQS queue with specified type and parameters
+    
+    Example:
+    ```json
+    {
+        "job_type": "print_numbers",
+        "job_params": {
+            "user_id": "xxx",
+            "end_number": 10
+        }
+    }
+    ```
+    
+    Or:
+    ```json
+    {
+        "job_type": "find_citers",
+        "job_params": {
+            "user_id": "xxx"
+        }
+    }
+    ```
     """
-    result = await sqs_controller.send_test_job(end_number)
+    result = await sqs_controller.send_job(
+        job_request.job_type, 
+        job_request.job_params
+    )
     return result 

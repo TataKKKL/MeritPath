@@ -8,19 +8,21 @@ class SQSController:
     def __init__(self):
         self.sqs_client = SQSClient()
     
-    async def send_test_job(self, end_number=None):
+    async def send_job(self, job_type, job_params=None):
         """
-        Send a test job to the SQS queue
+        Send a job to the SQS queue with specified type and parameters
+        
+        Args:
+            job_type (str): Type of job to execute (e.g., "print_numbers", "find_citers")
+            job_params (dict): Parameters for the job
         """
         # Generate a unique job ID
         job_id = str(uuid.uuid4())
         
         job = {
             "job_id": job_id,
-            "job_type": "print_numbers",
-            "job_params": {
-                "end_number": end_number
-            }
+            "job_type": job_type,
+            "job_params": job_params or {}
         }
         
         message_id = await self.sqs_client.send_message(job)
@@ -28,7 +30,7 @@ class SQSController:
         if message_id:
             return {
                 "status": "success",
-                "message": "Job sent to queue",
+                "message": f"Job of type '{job_type}' sent to queue",
                 "message_id": message_id,
                 "job_id": job_id,
                 "job": job
@@ -36,5 +38,5 @@ class SQSController:
         else:
             return {
                 "status": "failed",
-                "message": "Failed to send job to queue"
-            } 
+                "message": f"Failed to send job of type '{job_type}' to queue"
+            }

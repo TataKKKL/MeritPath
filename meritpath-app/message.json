@@ -1,0 +1,8 @@
+{
+  "job_id": "5E16AA8A-2CCE-4184-93DD-4F8EDAE9B8C3",
+  "job_type": "print_numbers",
+  "job_params": {
+    "user_id": "79f68859-6399-4e7a-a937-e7ee6500e4db",
+    "end_number": 100
+  }
+}

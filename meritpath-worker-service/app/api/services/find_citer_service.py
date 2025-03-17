@@ -5,6 +5,7 @@ from collections import defaultdict
 import time
 from requests.exceptions import HTTPError, RequestException
 from app.lib.supabase import supabase
+from app.api.routes.find_citer import update_citation_tables
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,7 @@ RETRY_DELAY = 5  # seconds
 class FindCiterService:
     def __init__(self):
         self.supabase = supabase
+        self.update_citation_tables = update_citation_tables
     
     def api_call_with_retry(self, func, *args, **kwargs):
         """Wrapper function to retry API calls with exponential backoff."""
@@ -129,7 +131,7 @@ class FindCiterService:
                 continue
 
         sorted_citation_data.sort(key=lambda item: item["total_citations"], reverse=True)
-        return sorted_citation_data
+        return sorted_citation_data, citation_years
     
     async def update_citation_tables(self, user_id, sorted_citation_data):
         """
@@ -225,21 +227,11 @@ class FindCiterService:
                     "error": f"User with ID {user_id} does not have a Semantic Scholar ID"
                 }
             
-            # Update user status to processing
-            self.supabase.table("users").update({
-                "citation_processing_status": "processing"
-            }).eq("id", user_id).execute()
-            
             # Find citers
-            sorted_citation_data = self.find_my_citers(semantic_scholar_id)
+            sorted_citation_data, citation_years = self.find_my_citers(semantic_scholar_id)
             
             # Update citation tables
             update_success = await self.update_citation_tables(user_id, sorted_citation_data)
-            
-            # Update user status to completed
-            self.supabase.table("users").update({
-                "citation_processing_status": "completed"
-            }).eq("id", user_id).execute()
             
             return {
                 "status": "success",
@@ -251,10 +243,7 @@ class FindCiterService:
         except Exception as e:
             logger.error(f"Error processing citation job: {e}")
             
-            # Update user status to failed
-            self.supabase.table("users").update({
-                "citation_processing_status": "failed"
-            }).eq("id", user_id).execute()
+            # No longer updating user status directly
             
             return {
                 "status": "failed",

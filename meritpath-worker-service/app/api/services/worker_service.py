@@ -61,6 +61,7 @@ class WorkerService:
         Process a single message
         """
         receipt_handle = message.get('ReceiptHandle')
+        job_id = None
         
         try:
             # Get message body
@@ -80,22 +81,41 @@ class WorkerService:
             
             # Extract job parameters
             job_id = body.get('job_id')
+            if job_id:
+                job_id = str(job_id).lower()  # Ensure lowercase UUID
+            
             job_type = body.get('job_type')
             job_params = body.get('job_params', {})
+            user_id = job_params.get('user_id')
             
             if not job_id:
-                logger.warning("Message missing job_id, generating a fallback ID")
-                job_id = str(uuid.uuid4())
+                logger.warning("Message missing job_id, generating a new ID")
+                job_id = await self.supabase_service.create_job(user_id, job_type, job_params)
+                if not job_id:
+                    logger.error("Failed to create job record")
+                    await self.sqs_client.delete_message(receipt_handle)
+                    return
+            else:
+                job_id = await self.supabase_service.insert_job(job_id, user_id, job_type, job_params)
+            
+            # Update job status to 'processing'
+            await self.supabase_service.update_job_status(job_id, 'processing')
             
             # Process based on job type
             result = None
             if job_type == 'print_numbers':
                 end_number = job_params.get('end_number')
-                result = await self.number_printer_service.print_numbers(end_number)
+                # Handle the citation processing job
+                if not user_id:
+                    result = {
+                        "status": "failed", 
+                        "error": "Missing required parameter: user_id"
+                    }
+                else:
+                    # Process the citation job
+                    result = await self.number_printer_service.print_numbers(end_number)
             elif job_type == 'find_citers':
                 # Handle the citation processing job
-                user_id = job_params.get('user_id')
-                
                 if not user_id:
                     result = {
                         "status": "failed", 
@@ -110,15 +130,17 @@ class WorkerService:
             
             logger.info(f"Job result: {result}")
             
-            # Save result to Supabase
+            # Update job status and save result
             status = result.get('status', 'unknown')
-            await self.supabase_service.save_job_result(job_id, job_type, status, result)
+            await self.supabase_service.update_job_status(job_id, status, result)
             
             # Delete the message after successful processing
             await self.sqs_client.delete_message(receipt_handle)
             
         except Exception as e:
             logger.error(f"Error processing message: {str(e)}")
-            # In a production system, you might want to move this to a dead-letter queue
-            # For now, we'll just delete it to avoid reprocessing
+            # Update job status to 'failed' if we have a job_id
+            if job_id:
+                await self.supabase_service.update_job_status(job_id, 'failed', {"error": str(e)})
+            # Delete the message to avoid reprocessing
             await self.sqs_client.delete_message(receipt_handle) 

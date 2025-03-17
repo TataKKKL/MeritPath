@@ -25,21 +25,9 @@ export default function Sidebar() {
             </Link>
           </li>
           <li>
-            <Link href="/dashboard" className={`flex items-center px-4 py-2 rounded-md hover:bg-foreground/5 ${isActive("/dashboard")}`}>
-              <span className="mr-3">📊</span>
-              <span>All Your Citers</span>
-            </Link>
-          </li>
-          <li>
             <Link href="/citers" className={`flex items-center px-4 py-2 rounded-md hover:bg-foreground/5 ${isActive("/citers")}`}>
               <span className="mr-3">📊</span>
-              <span>Shortlist Potential Citers</span>
-            </Link>
-          </li>
-          <li>
-            <Link href="/final" className={`flex items-center px-4 py-2 rounded-md hover:bg-foreground/5 ${isActive("/final")}`}>
-              <span className="mr-3">📊</span>
-              <span>Finalize Your Citers</span>
+              <span>Citers</span>
             </Link>
           </li>
           <li>

@@ -106,6 +106,7 @@ export async function makeServerPropsAuthRequest(
       });
     }
 
+
     // 4. Make the request with authentication
     const response = await fetch(url.toString(), {
       method: options.method || "GET",
@@ -115,6 +116,7 @@ export async function makeServerPropsAuthRequest(
       },
       ...(options.body ? { body: JSON.stringify(options.body) } : {}),
     });
+    console.log("response", response);
 
     if (!response.ok) {
       throw new Error(`Backend request failed: ${response.statusText}`);

@@ -3,8 +3,10 @@ import Link from 'next/link';
 import type { User } from '@supabase/supabase-js';
 import type { GetServerSidePropsContext } from 'next';
 import { createClient } from '@/utils/supabase/component';
-import { createClient as createServerClient } from '@/utils/supabase/server-props';
 import SemanticScholarIdDialog from '@/components/dialogs/SemanticScholarIdDialog';
+import { withServerPropsAuth, makeServerPropsAuthRequest } from '@/utils/auth/authServerPropsHandler';
+import { makeApiAuthRequest } from '@/utils/auth/authApiHandler';
+
 
 // Define a proper type for the user profile
 interface UserProfile {
@@ -36,16 +38,29 @@ const Home = ({ user, userProfile }: HomeProps) => {
   }, [user, profile]);
 
   const handleSuccess = async () => {
-    // Refresh the profile data after updating
+    // Refresh the profile data after updating using the API
     if (user) {
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-      
-      if (!error && data) {
-        setProfile(data);
+      try {
+        // Get the session which contains the access token
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.access_token) {
+          // Use makeApiAuthRequest with the session access token
+          try {
+            const data = await makeApiAuthRequest(
+              session.access_token,
+              `/api/users/${user.id}`,
+              { method: 'GET' }
+            );
+            
+            setProfile(data);
+            console.log('Profile updated successfully:', data);
+          } catch (error) {
+            console.error('Error fetching updated profile:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching updated profile:', error);
       }
     }
   };
@@ -91,39 +106,31 @@ const Home = ({ user, userProfile }: HomeProps) => {
 export default Home;
 
 export async function getServerSideProps(context: GetServerSidePropsContext) {
-  const supabase = createServerClient(context);
-  const { data: { user }, error } = await supabase.auth.getUser();
-  
-  if (error) {
-    console.error('Error fetching user:', error);
+  return withServerPropsAuth(context, async (user, accessToken) => {
+    console.log('[getServerSideProps] Auth check - User:', !!user);
+    console.log('[getServerSideProps] Auth check - Token:', !!accessToken);
+
+    // If user is logged in, fetch their profile from the API
+    let userProfile = null;
+    if (user) {
+      try {
+        // Use the auth request helper to fetch user profile
+        userProfile = await makeServerPropsAuthRequest(
+          context,
+          `/api/users/${user.id}`
+        );
+        
+        console.log('[getServerSideProps] Fetched user profile:', !!userProfile);
+      } catch (error) {
+        console.error("[getServerSideProps] Error fetching user profile:", error);
+      }
+    }
+    
     return {
       props: {
-        user: null,
-        error: error.message,
+        user,
+        userProfile,
       },
     };
-  }
-  
-  // If user is logged in, fetch their profile from the users table
-  let userProfile = null;
-  if (user) {
-    const { data, error: profileError } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", user.id)
-      .single();
-    
-    if (profileError) {
-      console.error("Error fetching user profile:", profileError);
-    } else {
-      userProfile = data;
-    }
-  }
-  
-  return {
-    props: {
-      user: user || null,
-      userProfile,
-    },
-  };
+  });
 }

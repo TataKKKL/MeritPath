@@ -50,33 +50,30 @@ export default function SemanticScholarIdDialog({
         throw new Error("No valid session found");
       }
       
-      // Make both API calls in parallel
-      await Promise.all([
-        // Update Semantic Scholar ID
-        makeApiAuthRequest(
-          session.access_token,
-          `/api/users/${userId}/semantic-scholar-id`,
-          {
-            method: 'PUT',
-            body: JSON.stringify({ semantic_scholar_id: semanticScholarId })
-          }
-        ),
-        
-        // Trigger the find_citers job
-        makeApiAuthRequest(
-          session.access_token,
-          "/api/sqs/jobs",
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              job_type: "find_citers",
-              job_params: {
-                user_id: userId
-              }
-            })
-          }
-        )
-      ]);
+      // First update Semantic Scholar ID
+      await makeApiAuthRequest(
+        session.access_token,
+        `/api/users/${userId}/semantic-scholar-id`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ semantic_scholar_id: semanticScholarId })
+        }
+      );
+      
+      // Then trigger the find_citers job after the ID has been updated
+      await makeApiAuthRequest(
+        session.access_token,
+        "/api/sqs/jobs",
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            job_type: "find_citers",
+            job_params: {
+              user_id: userId
+            }
+          })
+        }
+      );
       
       onSuccess();
       onOpenChange(false);

@@ -14,29 +14,9 @@ import { ArrowLeftIcon, ExternalLinkIcon } from "@radix-ui/react-icons";
 import Link from "next/link";
 import type { GetServerSidePropsContext } from 'next';
 import { withServerPropsAuth, makeServerPropsAuthRequest } from '@/utils/auth/authServerPropsHandler';
+import { CiterDetailProps } from "@/types/citers";
 
-interface CiterPapers {
-  [yourPaperTitle: string]: string[]; // Your paper title -> array of citer's papers that cited it
-}
-
-interface CiterDetail {
-  citer_id: string;
-  semantic_scholar_id: string;
-  citer_name: string;
-  paper_count: number;
-  total_citations: number;
-  papers: CiterPapers;
-}
-
-interface CiterDetailProps {
-  citer: CiterDetail;
-  user: {
-    id: string;
-    name: string;
-  };
-}
-
-export default function CiterDetail({ citer}: CiterDetailProps) {
+export default function CiterDetailPage({ citer }: CiterDetailProps) {
 
   if (!citer) {
     return (

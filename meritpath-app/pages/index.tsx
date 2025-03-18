@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import type { User } from '@supabase/supabase-js';
 import type { GetServerSidePropsContext } from 'next';
 import { createClient } from '@/utils/supabase/component';
 import SemanticScholarIdDialog from '@/components/dialogs/SemanticScholarIdDialog';
@@ -10,32 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ExternalLink } from "lucide-react";
-
-
-// Define a Paper type
-interface Paper {
-  url: string;
-  year: number;
-  title: string;
-  paperId: string;
-}
-
-// Define a proper type for the user profile
-interface UserProfile {
-  id: string;
-  semantic_scholar_id?: string;
-  name?: string;
-  email?: string;
-  influential_citation_count?: number;
-  author_paper_count?: number;
-  papers?: Paper[];
-  created_at?: string;
-}
-
-interface HomeProps {
-  user: User | null;
-  userProfile?: UserProfile;
-}
+import { Paper } from '@/types/paper';
+import { HomeProps } from '@/types/props';
 
 const Home = ({ user, userProfile }: HomeProps) => {
   const [showDialog, setShowDialog] = useState(false);

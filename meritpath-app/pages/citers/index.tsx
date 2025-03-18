@@ -17,30 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import Link from "next/link";
 import type { GetServerSidePropsContext } from 'next';
 import { withServerPropsAuth, makeServerPropsAuthRequest } from '@/utils/auth/authServerPropsHandler';
+import { CiterData, CitersListProps } from "@/types/citers";
 
-// Update the CiterData interface to match the API response
-interface CiterData {
-  citer_id: string;
-  semantic_scholar_id: string;
-  citer_name: string;
-  paper_count: number;
-  total_citations: number;
-}
-
-// Add a User interface for type safety
-interface User {
-  id: string;
-  name: string;
-  // Add other user properties as needed
-}
-
-// Add props type for the component
-interface DashboardProps {
-  user: User;
-  citers: CiterData[];
-}
-
-export default function Citers({ citers }: DashboardProps) {
+export default function Citers({ citers }: CitersListProps) {
   const [searchText, setSearchText] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);

@@ -145,9 +145,9 @@ const Home = ({ user, userProfile }: HomeProps) => {
       
       {user ? (
         <div className="text-center">
-          <p className="text-black dark:text-white text-xl mb-4">
+          {/* <p className="text-black dark:text-white text-xl mb-4">
             Logged in as: {user.email}
-          </p>
+          </p> */}
           
           {profile?.semantic_scholar_id && (
             <div className="mb-8">

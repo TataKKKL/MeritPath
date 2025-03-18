@@ -95,6 +95,8 @@ class WorkerService:
             # Check if job already exists in database
             existing_job = await self.supabase_service.get_job(job_id)
             
+            update_success = False
+            
             if existing_job:
                 # If job exists and is already being processed or completed, skip it
                 if existing_job.get('status') in ['processing', 'completed', 'success']:
@@ -102,19 +104,22 @@ class WorkerService:
                     await self.sqs_client.delete_message(receipt_handle)
                     return
                 
-                # If job exists but is in a retryable state (pending, failed), continue processing
-                logger.info(f"Found existing job {job_id} in state {existing_job.get('status')}")
+                # If job exists but is in a retryable state (pending, failed), use optimistic locking to update
+                current_status = existing_job.get('status')
+                logger.info(f"Found existing job {job_id} in state {current_status}")
+                update_success = await self.supabase_service.update_job_status_with_condition(
+                    job_id, 'processing', current_status)
             else:
-                # Job doesn't exist, create it
+                # Job doesn't exist, create it with status 'pending'
                 job_id = await self.supabase_service.insert_job(job_id, user_id, job_type, job_params)
                 if not job_id:
                     logger.error("Failed to create job record")
                     await self.sqs_client.delete_message(receipt_handle)
                     return
-            
-            # Update job status to 'processing' - only one worker will succeed with this
-            # No need for optimistic locking - if multiple workers try, only one will succeed
-            update_success = await self.supabase_service.update_job_status(job_id, 'processing')
+                
+                # Now try to update from pending to processing
+                update_success = await self.supabase_service.update_job_status_with_condition(
+                    job_id, 'processing', 'pending')
             
             if not update_success:
                 logger.info(f"Failed to update job {job_id} to processing state, another worker might be handling it")

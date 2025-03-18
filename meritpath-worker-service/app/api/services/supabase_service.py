@@ -98,6 +98,43 @@ class SupabaseService:
             logger.error(f"Exception updating job status in Supabase: {str(e)}")
             return False
     
+    async def update_job_status_with_condition(self, job_id, new_status, expected_current_status, result=None):
+        """
+        Update job status only if current status matches expected_current_status.
+        Returns True if update was successful, False otherwise.
+        """
+        try:
+            # Ensure job_id is lowercase for consistency
+            job_id = str(job_id).lower()
+            
+            # Update only if current status matches expected status
+            data = {
+                "status": new_status,
+                "updated_at": "now()"
+            }
+            
+            response = supabase.table("jobs").update(data) \
+                .eq("id", job_id) \
+                .eq("status", expected_current_status) \
+                .execute()
+            
+            # Check if any rows were updated
+            success = response.data and len(response.data) > 0
+            
+            if success:
+                logger.info(f"Job status updated from {expected_current_status} to {new_status} for job_id: {job_id}")
+                
+                # If result is provided and status is completed or failed, save the result
+                if result and new_status in ["completed", "failed", "success"]:
+                    await self.save_job_result(job_id, result)
+            else:
+                logger.info(f"No update performed for job {job_id} - current status doesn't match expected {expected_current_status}")
+                
+            return success
+        except Exception as e:
+            logger.error(f"Exception updating job status in Supabase: {str(e)}")
+            return False
+    
     async def save_job_result(self, job_id, result):
         """
         Save job result to job_results table

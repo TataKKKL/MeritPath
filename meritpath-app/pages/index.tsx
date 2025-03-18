@@ -31,10 +31,70 @@ const Home = ({ user, userProfile }: HomeProps) => {
 
   useEffect(() => {
     // Check if user is eligible for citation analysis
-    if (profile && profile.author_paper_count && profile.author_paper_count < 100) {
+    if (profile && profile.author_paper_count && profile.author_paper_count < 10) {
       setIsEligibleForCitationAnalysis(true);
     }
   }, [profile]);
+
+  // Add this to your component with the existing useEffect hooks
+
+// Track processing status with subscription
+useEffect(() => {
+  // Only setup subscription if we have a user profile
+  if (!profile || !profile.id) return;
+  
+  console.log('Setting up Supabase subscription for user:', profile.id);
+  
+  // Keep track of job statuses
+  const jobStatuses = new Map();
+  
+  // Subscribe to changes in the jobs table for this user
+  const subscription = supabase
+    .channel('job-status-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'jobs',
+        filter: `user_id=eq.${profile.id}`,
+      },
+      (payload) => {
+        // Log all payloads to verify subscription is working
+        console.log('Received payload from Supabase:', payload);
+        
+        // Only interested in find_citers jobs
+        if (payload.new.job_type === 'find_citers') {
+          console.log('Found find_citers job update:', {
+            oldStatus: payload.old.status,
+            newStatus: payload.new.status,
+            jobId: payload.new.id
+          });
+          
+          const jobId = payload.new.id;
+          const newStatus = payload.new.status;
+          
+          // If a job has changed to success or failed
+          if (newStatus === 'success' || newStatus === 'failed') {
+            console.log('Job completed with status:', newStatus);
+            setCitersProcessingStatus('done');
+          }
+          
+          // Store the current status for future reference
+          jobStatuses.set(jobId, newStatus);
+        }
+      }
+    )
+    .subscribe((status) => {
+      console.log('Subscription status:', status);
+    });
+  
+  // Clean up subscription when component unmounts
+  return () => {
+    console.log('Cleaning up Supabase subscription');
+    subscription.unsubscribe();
+  };
+}, [profile, supabase]);
 
   useEffect(() => {
     // Check if citers have already been extracted when user and profile are available

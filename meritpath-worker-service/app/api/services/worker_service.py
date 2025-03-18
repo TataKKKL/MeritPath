@@ -39,7 +39,7 @@ class WorkerService:
         Process messages from the queue
         """
         try:
-            messages = await self.sqs_client.receive_messages(max_messages=5, wait_time=1)
+            messages = await self.sqs_client.receive_messages(max_messages=5, wait_time=20, visibility_timeout=300)
             
             if not messages:
                 logger.debug("No messages received")
@@ -83,36 +83,55 @@ class WorkerService:
             job_id = body.get('job_id')
             if job_id:
                 job_id = str(job_id).lower()  # Ensure lowercase UUID
+            else:
+                logger.warning("Message missing job_id, skipping")
+                await self.sqs_client.delete_message(receipt_handle)
+                return
             
             job_type = body.get('job_type')
             job_params = body.get('job_params', {})
             user_id = job_params.get('user_id')
             
-            if not job_id:
-                logger.warning("Message missing job_id, generating a new ID")
-                job_id = await self.supabase_service.create_job(user_id, job_type, job_params)
+            # Check if job already exists in database
+            existing_job = await self.supabase_service.get_job(job_id)
+            
+            if existing_job:
+                # If job exists and is already being processed or completed, skip it
+                if existing_job.get('status') in ['processing', 'completed', 'success']:
+                    logger.info(f"Job {job_id} is already in state {existing_job.get('status')}, skipping")
+                    await self.sqs_client.delete_message(receipt_handle)
+                    return
+                
+                # If job exists but is in a retryable state (pending, failed), continue processing
+                logger.info(f"Found existing job {job_id} in state {existing_job.get('status')}")
+            else:
+                # Job doesn't exist, create it
+                job_id = await self.supabase_service.insert_job(job_id, user_id, job_type, job_params)
                 if not job_id:
                     logger.error("Failed to create job record")
                     await self.sqs_client.delete_message(receipt_handle)
                     return
-            else:
-                job_id = await self.supabase_service.insert_job(job_id, user_id, job_type, job_params)
             
-            # Update job status to 'processing'
-            await self.supabase_service.update_job_status(job_id, 'processing')
+            # Update job status to 'processing' - only one worker will succeed with this
+            # No need for optimistic locking - if multiple workers try, only one will succeed
+            update_success = await self.supabase_service.update_job_status(job_id, 'processing')
+            
+            if not update_success:
+                logger.info(f"Failed to update job {job_id} to processing state, another worker might be handling it")
+                await self.sqs_client.delete_message(receipt_handle)
+                return
             
             # Process based on job type
             result = None
             if job_type == 'print_numbers':
                 end_number = job_params.get('end_number')
-                # Handle the citation processing job
                 if not user_id:
                     result = {
                         "status": "failed", 
                         "error": "Missing required parameter: user_id"
                     }
                 else:
-                    # Process the citation job
+                    # Process the job
                     result = await self.number_printer_service.print_numbers(end_number)
             elif job_type == 'find_citers':
                 # Handle the citation processing job
@@ -143,4 +162,4 @@ class WorkerService:
             if job_id:
                 await self.supabase_service.update_job_status(job_id, 'failed', {"error": str(e)})
             # Delete the message to avoid reprocessing
-            await self.sqs_client.delete_message(receipt_handle) 
+            await self.sqs_client.delete_message(receipt_handle)

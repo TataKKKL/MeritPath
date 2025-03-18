@@ -8,10 +8,10 @@ class SupabaseService:
     async def insert_job(self, job_id, user_id, job_type, params=None):
         """
         Insert a new job into the jobs table
-        Create a new job in the jobs table
         """
         try:
-            job_id = str(uuid.uuid4()).lower()  # Ensure lowercase UUID
+            # Use the provided job_id, don't generate a new one
+            job_id = str(job_id).lower()  # Ensure lowercase UUID
             data = {
                 "id": job_id,
                 "user_id": user_id,
@@ -32,32 +32,68 @@ class SupabaseService:
             logger.error(f"Exception creating job in Supabase: {str(e)}")
             return None
     
-    async def update_job_status(self, job_id, status, result=None):
+    async def get_job(self, job_id):
         """
-        Update job status in the jobs table
+        Get job details from the jobs table
         """
         try:
             # Ensure job_id is lowercase for consistency
             job_id = str(job_id).lower()
             
-            data = {
-                "status": status,
-                "updated_at": "now()"
-            }
+            response = supabase.table("jobs").select("*").eq("id", job_id).execute()
             
-            response = supabase.table("jobs").update(data).eq("id", job_id).execute()
+            if hasattr(response, 'error') and response.error:
+                logger.error(f"Error getting job from Supabase: {response.error}")
+                return None
+            
+            if response.data and len(response.data) > 0:
+                return response.data[0]
+            
+            return None
+        except Exception as e:
+            logger.error(f"Exception getting job from Supabase: {str(e)}")
+            return None
+    
+    async def update_job_status(self, job_id, status, result=None):
+        """
+        Update job status in the jobs table.
+        For 'processing' status, only updates if the job is in 'pending' or 'failed' state.
+        """
+        try:
+            # Ensure job_id is lowercase for consistency
+            job_id = str(job_id).lower()
+            
+            # Check current status if we're trying to update to 'processing'
+            if status == 'processing':
+                # Only update to processing if currently in pending or failed state
+                response = supabase.table("jobs").update({
+                    "status": status,
+                    "updated_at": "now()"
+                }).eq("id", job_id).in_("status", ["pending", "failed"]).execute()
+            else:
+                # For other statuses, just update
+                response = supabase.table("jobs").update({
+                    "status": status,
+                    "updated_at": "now()"
+                }).eq("id", job_id).execute()
             
             if hasattr(response, 'error') and response.error:
                 logger.error(f"Error updating job status in Supabase: {response.error}")
                 return False
-                
-            logger.info(f"Job status updated to {status} for job_id: {job_id}")
             
-            # If result is provided and status is completed or failed, save the result
-            if result and status in ["completed", "failed", "success"]:
-                await self.save_job_result(job_id, result)
+            # Check if any rows were updated
+            success = response.data and len(response.data) > 0
+            
+            if success:
+                logger.info(f"Job status updated to {status} for job_id: {job_id}")
                 
-            return True
+                # If result is provided and status is completed or failed, save the result
+                if result and status in ["completed", "failed", "success"]:
+                    await self.save_job_result(job_id, result)
+            else:
+                logger.info(f"No update performed for job {job_id} to status {status}")
+                
+            return success
         except Exception as e:
             logger.error(f"Exception updating job status in Supabase: {str(e)}")
             return False
@@ -86,25 +122,3 @@ class SupabaseService:
         except Exception as e:
             logger.error(f"Exception saving job result to Supabase: {str(e)}")
             return False
-    
-    async def get_job(self, job_id):
-        """
-        Get job details from the jobs table
-        """
-        try:
-            # Ensure job_id is lowercase for consistency
-            job_id = str(job_id).lower()
-            
-            response = supabase.table("jobs").select("*").eq("id", job_id).execute()
-            
-            if hasattr(response, 'error') and response.error:
-                logger.error(f"Error getting job from Supabase: {response.error}")
-                return None
-            
-            if response.data and len(response.data) > 0:
-                return response.data[0]
-            
-            return None
-        except Exception as e:
-            logger.error(f"Exception getting job from Supabase: {str(e)}")
-            return None 

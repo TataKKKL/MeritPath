@@ -138,45 +138,35 @@ export default function CiterDetail({ citer}: CiterDetailProps) {
 }
 
 export async function getServerSideProps(context: GetServerSidePropsContext) {
-  
-  return withServerPropsAuth(context, async (user, accessToken) => {
-    console.log('[getServerSideProps] Auth check - User:', !!user);
-    console.log('[getServerSideProps] Auth check - Token:', !!accessToken);
+  return withServerPropsAuth(context, async (user) => {
     if (!user) {
       return {
-        redirect: {
-          destination: '/login',
-          permanent: false,
-        },
+        props: { user: null, citer: null }
       };
     }
     
-    const { id } = context.params as { id: string };
+    const { id } = context.params || {};
     
-    // Fetch citer details from the API
-    let citer = null;
+    if (!id || typeof id !== 'string') {
+      return {
+        props: { user, citer: null }
+      };
+    }
+    
     try {
-      citer = await makeServerPropsAuthRequest(
+      const citer = await makeServerPropsAuthRequest(
         context,
         `/api/users/${id}/individual_citer`
       );
       
-      console.log('[getServerSideProps] Fetched individual citer data:', !!citer);
-    } catch (error) {
-      console.error("[getServerSideProps] Error fetching individual citer data:", error);
-    }
-    
-    if (!citer) {
       return {
-        notFound: true,
+        props: { user, citer }
+      };
+    } catch (error) {
+      console.error("[getServerSideProps] Error fetching citer data:", error);
+      return {
+        props: { user, citer: null }
       };
     }
-    
-    return {
-      props: {
-        user,
-        citer,
-      },
-    };
   });
 } 

@@ -253,15 +253,12 @@ export default function Citers({ user, citers }: DashboardProps) {
 
 // Update getServerSideProps to fetch real data
 export async function getServerSideProps(context: GetServerSidePropsContext) {
-  return withServerPropsAuth(context, async (user, accessToken) => {
+  return withServerPropsAuth(context, async (user) => {
     console.log('[getServerSideProps] Auth check - User:', !!user);
-    console.log('[getServerSideProps] Auth check - Token:', !!accessToken);
+    
     if (!user) {
       return {
-        redirect: {
-          destination: '/login',
-          permanent: false,
-        },
+        props: { user: null, citers: [] }
       };
     }
     

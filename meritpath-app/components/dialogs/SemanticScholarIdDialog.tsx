@@ -60,20 +60,20 @@ export default function SemanticScholarIdDialog({
         }
       );
       
-      // Then trigger the find_citers job after the ID has been updated
-      await makeApiAuthRequest(
-        session.access_token,
-        "/api/sqs/jobs",
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            job_type: "find_citers",
-            job_params: {
-              user_id: userId
-            }
-          })
-        }
-      );
+      // // Then trigger the find_citers job after the ID has been updated
+      // await makeApiAuthRequest(
+      //   session.access_token,
+      //   "/api/sqs/jobs",
+      //   {
+      //     method: 'POST',
+      //     body: JSON.stringify({
+      //       job_type: "find_citers",
+      //       job_params: {
+      //         user_id: userId
+      //       }
+      //     })
+      //   }
+      // );
       
       onSuccess();
       onOpenChange(false);

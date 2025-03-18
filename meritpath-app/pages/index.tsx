@@ -36,6 +36,8 @@ interface HomeProps {
 const Home = ({ user, userProfile }: HomeProps) => {
   const [showDialog, setShowDialog] = useState(false);
   const [profile, setProfile] = useState(userProfile);
+  const [isProcessingCiters, setIsProcessingCiters] = useState(false);
+  const [citersAlreadyExtracted, setCitersAlreadyExtracted] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -43,6 +45,33 @@ const Home = ({ user, userProfile }: HomeProps) => {
     if (user && profile && !profile.semantic_scholar_id) {
       setShowDialog(true);
     }
+  }, [user, profile]);
+
+  useEffect(() => {
+    // Check if citers have already been extracted when user and profile are available
+    const checkCitersExtracted = async () => {
+      if (user && profile?.semantic_scholar_id) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          if (session?.access_token) {
+            const response = await makeApiAuthRequest(
+              session.access_token,
+              `/api/users/${user.id}/job_done`,
+              { method: 'GET' }
+            );
+            
+            if (response && response.job_done) {
+              setCitersAlreadyExtracted(true);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking if citers were extracted:', error);
+        }
+      }
+    };
+    
+    checkCitersExtracted();
   }, [user, profile]);
 
   const handleSuccess = async () => {
@@ -73,6 +102,43 @@ const Home = ({ user, userProfile }: HomeProps) => {
     }
   };
 
+  const handleAnalyzeCiters = async () => {
+    if (!user) return;
+    
+    setIsProcessingCiters(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.access_token) {
+        await makeApiAuthRequest(
+          session.access_token,
+          "/api/sqs/jobs",
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              job_type: "find_citers",
+              job_params: {
+                user_id: user.id
+              }
+            })
+          }
+        );
+        
+        alert("Your citation analysis has been started. Results will be available soon.");
+      }
+    } catch (error) {
+      console.error('Error starting citation analysis:', error);
+      alert("Failed to start citation analysis. Please try again later.");
+    } finally {
+      setIsProcessingCiters(false);
+    }
+  };
+
+  // Check if user is eligible for citation analysis
+  const isEligibleForCitationAnalysis = profile && 
+    (profile.influential_citation_count || 0) < 5 && 
+    (profile.author_paper_count || 0) < 10;
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-white dark:bg-gray-900 p-8">
       <h1 className="text-black dark:text-white text-4xl mb-8">Welcome to the MeritPath App</h1>
@@ -91,6 +157,34 @@ const Home = ({ user, userProfile }: HomeProps) => {
               <p className="text-black dark:text-white text-lg mb-4">
                 Semantic Scholar ID: {profile.semantic_scholar_id}
               </p>
+              
+              {/* Citation analysis eligibility section */}
+              <div className="mt-6 mb-6 p-4 border rounded bg-gray-50 dark:bg-gray-800">
+                {isEligibleForCitationAnalysis ? (
+                  <div>
+                    <p className="text-green-600 dark:text-green-400 font-medium mb-3">
+                      Congratulations, you are eligible for analyzing your citers!
+                    </p>
+                    {citersAlreadyExtracted ? (
+                      <p className="text-blue-600 dark:text-blue-400">
+                        Your citers have already been extracted and analyzed.
+                      </p>
+                    ) : (
+                      <button
+                        onClick={handleAnalyzeCiters}
+                        disabled={isProcessingCiters}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isProcessingCiters ? "Processing..." : "Analyze My Citers"}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-amber-600 dark:text-amber-400">
+                    Sorry, our analyzing citers feature is only available to junior researchers.
+                  </p>
+                )}
+              </div>
               
               {profile.papers && profile.papers.length > 0 && (
                 <div className="mt-6">

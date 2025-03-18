@@ -16,6 +16,7 @@ import { MagnifyingGlassIcon } from "@radix-ui/react-icons";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from "next/link";
 import type { GetServerSidePropsContext } from 'next';
+import { withServerPropsAuth, makeServerPropsAuthRequest } from '@/utils/auth/authServerPropsHandler';
 
 // Update the CiterData interface to match the API response
 interface CiterData {
@@ -252,10 +253,9 @@ export default function Citers({ user, citers }: DashboardProps) {
 
 // Update getServerSideProps to fetch real data
 export async function getServerSideProps(context: GetServerSidePropsContext) {
-  // Import the necessary utilities
-  const { withServerPropsAuth, makeServerPropsAuthRequest } = require('@/utils/auth/authServerPropsHandler');
-  
   return withServerPropsAuth(context, async (user, accessToken) => {
+    console.log('[getServerSideProps] Auth check - User:', !!user);
+    console.log('[getServerSideProps] Auth check - Token:', !!accessToken);
     if (!user) {
       return {
         redirect: {

@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import Head from "next/head";
-import { useRouter } from "next/router";
 import { 
   Table, 
   TableBody, 
@@ -14,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { ArrowLeftIcon, ExternalLinkIcon } from "@radix-ui/react-icons";
 import Link from "next/link";
 import type { GetServerSidePropsContext } from 'next';
+import { withServerPropsAuth, makeServerPropsAuthRequest } from '@/utils/auth/authServerPropsHandler';
 
 interface CiterPapers {
   [yourPaperTitle: string]: string[]; // Your paper title -> array of citer's papers that cited it
@@ -36,8 +36,7 @@ interface CiterDetailProps {
   };
 }
 
-export default function CiterDetail({ citer, user }: CiterDetailProps) {
-  const router = useRouter();
+export default function CiterDetail({ citer}: CiterDetailProps) {
 
   if (!citer) {
     return (
@@ -139,9 +138,10 @@ export default function CiterDetail({ citer, user }: CiterDetailProps) {
 }
 
 export async function getServerSideProps(context: GetServerSidePropsContext) {
-  const { withServerPropsAuth, makeServerPropsAuthRequest } = require('@/utils/auth/authServerPropsHandler');
   
   return withServerPropsAuth(context, async (user, accessToken) => {
+    console.log('[getServerSideProps] Auth check - User:', !!user);
+    console.log('[getServerSideProps] Auth check - Token:', !!accessToken);
     if (!user) {
       return {
         redirect: {

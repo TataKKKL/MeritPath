@@ -20,7 +20,7 @@ import { withServerPropsAuth, makeServerPropsAuthRequest } from '@/utils/auth/au
 import { CiterData, CitersListProps } from "@/types/citers";
 import { useCitationStore } from '@/store/citationStore';
 
-export default function Citers({ citers = [] }: CitersListProps) {
+export default function Citers({ citers}: CitersListProps) {
   const [searchText, setSearchText] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -32,10 +32,11 @@ export default function Citers({ citers = [] }: CitersListProps) {
   // Add this to access the store state
   const citersProcessingStatus = useCitationStore(state => state.citersProcessingStatus);
 
-  // Filter data based on search text - add a safety check for citers
-  const filteredData = Array.isArray(citers) 
-    ? citers.filter(item => item.citer_name.toLowerCase().includes(searchText.toLowerCase()))
-    : [];
+  // Filter data based on search text
+  const filteredData = citers.filter(
+    item =>
+      item.citer_name.toLowerCase().includes(searchText.toLowerCase())
+  );
 
   // Apply sorting to data
   const sortedData = React.useMemo(() => {
@@ -276,24 +277,18 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
       };
     }
     
-    // Get the citation store state to check processing status
-    const citationStore = useCitationStore.getState();
-    console.log('[getServerSideProps] Citation processing status:', citationStore.citersProcessingStatus);
-    
-    // Only fetch citers data if processing is done
+    // Fetch citers data from the API
     let citers = [];
-    if (citationStore.citersProcessingStatus === 'done') {
-      try {
-        citers = await makeServerPropsAuthRequest(
-          context,
-          `/api/users/${user.id}/citers`
-        );
-        
-        console.log('[getServerSideProps] Fetched citers data:', !!citers);
-      } catch (error) {
-        console.error("[getServerSideProps] Error fetching citers data:", error);
-        citers = []; // Use empty array if fetch fails
-      }
+    try {
+      citers = await makeServerPropsAuthRequest(
+        context,
+        `/api/users/${user.id}/citers`
+      );
+      
+      console.log('[getServerSideProps] Fetched citers data:', !!citers);
+    } catch (error) {
+      console.error("[getServerSideProps] Error fetching citers data:", error);
+      citers = []; // Use empty array if fetch fails
     }
     
     return {

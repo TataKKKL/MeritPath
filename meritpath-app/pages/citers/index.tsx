@@ -41,7 +41,7 @@ interface DashboardProps {
   citers: CiterData[];
 }
 
-export default function Citers({ user, citers }: DashboardProps) {
+export default function Citers({ citers }: DashboardProps) {
   const [searchText, setSearchText] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -111,9 +111,6 @@ export default function Citers({ user, citers }: DashboardProps) {
       <div className="container mx-auto py-10 space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold tracking-tight">Researchers Who Cited Your Work</h1>
-          <div className="text-sm text-muted-foreground">
-            Logged in as: {user.name}
-          </div>
         </div>
         
         <Card>

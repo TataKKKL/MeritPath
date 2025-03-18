@@ -34,12 +34,18 @@ export const useCitationStore = create<CitationState>()(
               `/api/users/${userId}/job_done`,
               { method: 'GET' }
             );
-            console.log('response: ', response);
-            console.log('response.ok: ', response.ok);
-            console.log('response.ok: ', response.job_done);
-            if (response.job_done) {
-              set({ citersProcessingStatus: 'done' });
-              console.log('citersProcessingStatus: ', get().citersProcessingStatus);
+            
+            console.log('Job status response:', response);
+            
+            if (response && typeof response.job_done === 'boolean') {
+              if (response.job_done) {
+                set({ citersProcessingStatus: 'done' });
+                console.log('citersProcessingStatus set to done');
+              } else {
+                console.log('Job not done yet');
+              }
+            } else {
+              console.error('Invalid response format from job_done endpoint:', response);
             }
           }
         } catch (error) {

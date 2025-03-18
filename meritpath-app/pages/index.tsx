@@ -15,8 +15,8 @@ import { HomeProps } from '@/types/props';
 const Home = ({ user, userProfile }: HomeProps) => {
   const [showDialog, setShowDialog] = useState(false);
   const [profile, setProfile] = useState(userProfile);
-  const [isProcessingCiters, setIsProcessingCiters] = useState(false);
-  const [citersAlreadyExtracted, setCitersAlreadyExtracted] = useState(false);
+  const [citersProcessingStatus, setCitersProcessingStatus] = useState<'not_started' | 'processing' | 'done'>('not_started');
+  const [isEligibleForCitationAnalysis, setIsEligibleForCitationAnalysis] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -25,6 +25,16 @@ const Home = ({ user, userProfile }: HomeProps) => {
       setShowDialog(true);
     }
   }, [user, profile]);
+
+  console.log(profile);
+  console.log('isEligibleForCitationAnalysis: ', isEligibleForCitationAnalysis);
+
+  useEffect(() => {
+    // Check if user is eligible for citation analysis
+    if (profile && profile.author_paper_count && profile.author_paper_count < 100) {
+      setIsEligibleForCitationAnalysis(true);
+    }
+  }, [profile]);
 
   useEffect(() => {
     // Check if citers have already been extracted when user and profile are available
@@ -41,7 +51,7 @@ const Home = ({ user, userProfile }: HomeProps) => {
             );
             
             if (response && response.job_done) {
-              setCitersAlreadyExtracted(true);
+              setCitersProcessingStatus('done');
             }
           }
         } catch (error) {
@@ -84,7 +94,7 @@ const Home = ({ user, userProfile }: HomeProps) => {
   const handleAnalyzeCiters = async () => {
     if (!user) return;
     
-    setIsProcessingCiters(true);
+    setCitersProcessingStatus('processing');
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
@@ -108,8 +118,7 @@ const Home = ({ user, userProfile }: HomeProps) => {
     } catch (error) {
       console.error('Error starting citation analysis:', error);
       alert("Failed to start citation analysis. Please try again later.");
-    } finally {
-      setIsProcessingCiters(false);
+      setCitersProcessingStatus('not_started');
     }
   };
 
@@ -143,7 +152,7 @@ const Home = ({ user, userProfile }: HomeProps) => {
               <CardTitle>Citation Analysis</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
-              {citersAlreadyExtracted ? (
+              {citersProcessingStatus === 'done' ? (
                 <Button
                   variant="outline"
                   className="mt-3"
@@ -151,14 +160,31 @@ const Home = ({ user, userProfile }: HomeProps) => {
                 >
                   <Link href="/citers">View Analysis Results</Link>
                 </Button>
+              ) : isEligibleForCitationAnalysis ? (
+                citersProcessingStatus === 'processing' ? (
+                  <Button
+                    disabled={true}
+                    size="lg"
+                    variant="secondary"
+                  >
+                    Processing...
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleAnalyzeCiters}
+                    size="lg"
+                    variant="secondary"
+                  >
+                    Analyze My Citers
+                  </Button>
+                )
               ) : (
                 <Button
-                  onClick={handleAnalyzeCiters}
-                  disabled={isProcessingCiters}
-                  size="lg"
-                  variant="secondary"
+                  variant="outline"
+                  className="mt-3"
+                  disabled={true}
                 >
-                  {isProcessingCiters ? "Processing..." : "Analyze My Citers"}
+                  <span className="text-sm">You are not eligible for citation analysis</span>
                 </Button>
               )}
             </CardContent>

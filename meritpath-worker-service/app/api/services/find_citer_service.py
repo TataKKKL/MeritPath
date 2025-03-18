@@ -75,60 +75,89 @@ class FindCiterService:
         """
         session = Session()
         your_papers = self.get_author_papers(semantic_scholar_id, session)
-        citation_details = defaultdict(lambda: {"authorId": "", "papers": defaultdict(list)})
+        
+        # Use a more memory-efficient structure - only store what's needed
+        citation_details = {}
         citation_years = []
         coauthors = set()
         total_papers = len(your_papers)
         processed_papers = 0
 
+        # Add batch processing to limit memory usage
+        batch_size = 10  # Process papers in smaller batches
+        
         logger.info(f"Processing {total_papers} papers for author {semantic_scholar_id}")
 
-        for paper in your_papers:
-            try:
-                citations = self.get_citations(paper["paperId"], session)
-                logger.info(f"Processing paper: {paper['title']} - Found {len(citations)} citations")
-                paper_authors = self.get_paper_authors(paper["paperId"], session)
-                coauthors.update(author["name"] for author in paper_authors if author["authorId"] != semantic_scholar_id)
+        # Process papers in batches to reduce memory pressure
+        for i in range(0, total_papers, batch_size):
+            batch_papers = your_papers[i:i+batch_size]
+            
+            for paper in batch_papers:
+                try:
+                    citations = self.get_citations(paper["paperId"], session)
+                    logger.info(f"Processing paper: {paper['title']} - Found {len(citations)} citations")
+                    paper_authors = self.get_paper_authors(paper["paperId"], session)
+                    coauthors.update(author["name"] for author in paper_authors if author["authorId"] != semantic_scholar_id)
 
-                for citation in citations:
-                    logger.info(f"Processing citation {citation['title']}")
-                    if "paperId" in citation:
-                        authors = self.get_paper_authors(citation["paperId"], session)
-                        for author in authors:
-                            author_name = author.get("name")
-                            author_id = author.get("authorId")
-                            if author_name and author_id:
-                                citation_details[author_name]["authorId"] = author_id
-                                citation_details[author_name]["papers"][paper["title"]].append(citation["title"])
-                        if citation.get("year"):
-                            citation_years.append(citation["year"])
+                    for citation in citations:
+                        logger.info(f"Processing citation {citation['title']}")
+                        if "paperId" in citation:
+                            authors = self.get_paper_authors(citation["paperId"], session)
+                            for author in authors:
+                                author_name = author.get("name")
+                                author_id = author.get("authorId")
+                                if author_name and author_id:
+                                    # More efficient dictionary initialization
+                                    if author_name not in citation_details:
+                                        citation_details[author_name] = {
+                                            "authorId": author_id,
+                                            "papers": {}
+                                        }
+                                    
+                                    # Initialize paper entry if needed
+                                    if paper["title"] not in citation_details[author_name]["papers"]:
+                                        citation_details[author_name]["papers"][paper["title"]] = []
+                                    
+                                    citation_details[author_name]["papers"][paper["title"]].append(citation["title"])
+                            
+                            if citation.get("year"):
+                                citation_years.append(citation["year"])
 
-                processed_papers += 1
-                logger.info(f"Processed paper {processed_papers} of {total_papers}")
-            except Exception as e:
-                logger.error(f"Error processing paper {paper['title']}: {e}")
-                continue
+                    processed_papers += 1
+                    logger.info(f"Processed paper {processed_papers} of {total_papers}")
+                except Exception as e:
+                    logger.error(f"Error processing paper {paper['title']}: {e}")
+                    continue
 
         sorted_citation_data = []
         total_authors = len(citation_details)
 
-        for index, (author, data) in enumerate(citation_details.items(), 1):
-            try:
-                logger.info(f"Processing author {author} ({index}/{total_authors})")
-                citing_author_id = data["authorId"]
-                papers = data["papers"]
-                total_citations = sum(len(citing_papers) for citing_papers in papers.values())
-                author_details = self.get_author_details(citing_author_id, semantic_scholar_id, session)
-                sorted_citation_data.append({
-                    "author_name": author,
-                    "semantic_scholar_id": citing_author_id,
-                    "total_citations": total_citations,
-                    "papers": dict(papers),
-                    "paper_count": author_details["paper_count"],
-                })
-            except Exception as e:
-                logger.error(f"Error processing author {author}: {e}")
-                continue
+        # Process authors in batches too
+        author_batch_size = 20
+        author_items = list(citation_details.items())
+        
+        for i in range(0, total_authors, author_batch_size):
+            author_batch = author_items[i:i+author_batch_size]
+            
+            for index, (author, data) in enumerate(author_batch, i+1):
+                try:
+                    logger.info(f"Processing author {author} ({index}/{total_authors})")
+                    citing_author_id = data["authorId"]
+                    papers = data["papers"]
+                    total_citations = sum(len(citing_papers) for citing_papers in papers.values())
+                    
+                    # Only fetch additional details if needed
+                    author_details = self.get_author_details(citing_author_id, semantic_scholar_id, session)
+                    sorted_citation_data.append({
+                        "author_name": author,
+                        "semantic_scholar_id": citing_author_id,
+                        "total_citations": total_citations,
+                        "papers": dict(papers),
+                        "paper_count": author_details["paper_count"],
+                    })
+                except Exception as e:
+                    logger.error(f"Error processing author {author}: {e}")
+                    continue
 
         sorted_citation_data.sort(key=lambda item: item["total_citations"], reverse=True)
         return sorted_citation_data, citation_years
@@ -142,57 +171,64 @@ class FindCiterService:
             sorted_citation_data: List of citation data for authors who cited the user
         """
         try:
-            # Process each citing author
-            for citer_data in sorted_citation_data:
-                citer_semantic_scholar_id = citer_data.get("semantic_scholar_id")
-                citer_name = citer_data.get("author_name")
-                total_citations = citer_data.get("total_citations")
-                paper_count = citer_data.get("paper_count")
-                papers = citer_data.get("papers", {})
+            # Process in batches to reduce memory usage
+            batch_size = 50
+            total_citers = len(sorted_citation_data)
+            
+            for i in range(0, total_citers, batch_size):
+                batch = sorted_citation_data[i:i+batch_size]
                 
-                # Check if citer already exists in citers table
-                citer_response = self.supabase.table("citers").select("id").eq("semantic_scholar_id", citer_semantic_scholar_id).execute()
-                
-                citer_id = None
-                # If citer exists, update the record
-                if citer_response.data and len(citer_response.data) > 0:
-                    citer_id = citer_response.data[0].get("id")
-                    self.supabase.table("citers").update({
-                        "citer_name": citer_name,
-                        "paper_count": paper_count,
-                        "updated_at": "now()"
-                    }).eq("id", citer_id).execute()
-                # If citer doesn't exist, insert a new record
-                else:
-                    citer_insert_response = self.supabase.table("citers").insert({
-                        "semantic_scholar_id": citer_semantic_scholar_id,
-                        "citer_name": citer_name,
-                        "paper_count": paper_count
-                    }).execute()
-                    if citer_insert_response.data and len(citer_insert_response.data) > 0:
-                        citer_id = citer_insert_response.data[0].get("id")
-                
-                # If we have a valid citer_id, update the user_citers table
-                if citer_id:
-                    # Check if this user-citer relationship already exists
-                    user_citer_response = self.supabase.table("user_citers").select("id").eq("user_id", user_id).eq("citer_id", citer_id).execute()
+                # Process each citing author in the current batch
+                for citer_data in batch:
+                    citer_semantic_scholar_id = citer_data.get("semantic_scholar_id")
+                    citer_name = citer_data.get("author_name")
+                    total_citations = citer_data.get("total_citations")
+                    paper_count = citer_data.get("paper_count")
+                    papers = citer_data.get("papers", {})
                     
-                    # If relationship exists, update it
-                    if user_citer_response.data and len(user_citer_response.data) > 0:
-                        user_citer_id = user_citer_response.data[0].get("id")
-                        self.supabase.table("user_citers").update({
-                            "papers": papers,
-                            "total_citations": total_citations,
+                    # Check if citer already exists in citers table
+                    citer_response = self.supabase.table("citers").select("id").eq("semantic_scholar_id", citer_semantic_scholar_id).execute()
+                    
+                    citer_id = None
+                    # If citer exists, update the record
+                    if citer_response.data and len(citer_response.data) > 0:
+                        citer_id = citer_response.data[0].get("id")
+                        self.supabase.table("citers").update({
+                            "citer_name": citer_name,
+                            "paper_count": paper_count,
                             "updated_at": "now()"
-                        }).eq("id", user_citer_id).execute()
-                    # If relationship doesn't exist, insert it
+                        }).eq("id", citer_id).execute()
+                    # If citer doesn't exist, insert a new record
                     else:
-                        self.supabase.table("user_citers").insert({
-                            "user_id": user_id,
-                            "citer_id": citer_id,
-                            "papers": papers,
-                            "total_citations": total_citations
+                        citer_insert_response = self.supabase.table("citers").insert({
+                            "semantic_scholar_id": citer_semantic_scholar_id,
+                            "citer_name": citer_name,
+                            "paper_count": paper_count
                         }).execute()
+                        if citer_insert_response.data and len(citer_insert_response.data) > 0:
+                            citer_id = citer_insert_response.data[0].get("id")
+                    
+                    # If we have a valid citer_id, update the user_citers table
+                    if citer_id:
+                        # Check if this user-citer relationship already exists
+                        user_citer_response = self.supabase.table("user_citers").select("id").eq("user_id", user_id).eq("citer_id", citer_id).execute()
+                        
+                        # If relationship exists, update it
+                        if user_citer_response.data and len(user_citer_response.data) > 0:
+                            user_citer_id = user_citer_response.data[0].get("id")
+                            self.supabase.table("user_citers").update({
+                                "papers": papers,
+                                "total_citations": total_citations,
+                                "updated_at": "now()"
+                            }).eq("id", user_citer_id).execute()
+                        # If relationship doesn't exist, insert it
+                        else:
+                            self.supabase.table("user_citers").insert({
+                                "user_id": user_id,
+                                "citer_id": citer_id,
+                                "papers": papers,
+                                "total_citations": total_citations
+                            }).execute()
             
             return True
         except Exception as e:

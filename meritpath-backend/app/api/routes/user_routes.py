@@ -137,4 +137,175 @@ async def update_semantic_scholar_id(
         raise
     except Exception as e:
         logger.error(f"Exception updating semantic scholar ID: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error updating Semantic Scholar ID: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error updating Semantic Scholar ID: {str(e)}")
+
+
+
+@router.get("/{user_id}/job_done")
+async def check_job_done(
+    user_id: str,
+    current_user=Depends(get_current_user)
+):
+    """
+    Check if a user is eligible to create new jobs
+    
+    A user is not eligible if they already have at least one successful find_citers job
+    """
+    try:
+        # Optional: Add authorization check if needed
+        # if current_user["id"] != user_id:
+        #     raise HTTPException(status_code=403, detail="Not authorized to check this user's eligibility")
+        
+        # Query Supabase for successful find_citers jobs for this user
+        response = supabase.table("jobs").select("*").eq("user_id", user_id).eq("job_type", "find_citers").eq("status", "success").execute()
+        
+        if hasattr(response, 'error') and response.error:
+            logger.error(f"Error checking job eligibility: {response.error}")
+            raise HTTPException(status_code=500, detail="Failed to check job eligibility")
+        
+        # If the user has at least one successful find_citers job, they are not eligible
+        job_done = len(response.data) > 0
+        
+        return {
+            "user_id": user_id,
+            "job_done": job_done
+        }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Exception checking job eligibility: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error checking job eligibility: {str(e)}")
+
+@router.get("/{user_id}/citers")
+async def get_user_citers(
+    user_id: str,
+    current_user=Depends(get_current_user)
+):
+    """
+    Get all citers associated with a user (authenticated endpoint)
+    
+    Returns a list of citers with their details including citer_id, papers,
+    total_citations, citer_name, and paper_count
+    """
+    try:
+        # Optional: Add authorization check if needed
+        # if current_user["id"] != user_id:
+        #     raise HTTPException(status_code=403, detail="Not authorized to access this user's citers")
+        
+        # Query user_citers table for this user
+        user_citers_response = supabase.table("user_citers").select("*").eq("user_id", user_id).execute()
+        
+        if hasattr(user_citers_response, 'error') and user_citers_response.error:
+            logger.error(f"Error retrieving user citers: {user_citers_response.error}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve user citers")
+        
+        user_citers_data = user_citers_response.data
+        
+        if not user_citers_data:
+            # Return empty list if no citers found
+            return []
+        
+        # Get all citer_ids
+        citer_ids = [item["citer_id"] for item in user_citers_data]
+        
+        # Get citer details from citers table
+        citers_response = supabase.table("citers").select("*").in_("id", citer_ids).execute()
+        
+        if hasattr(citers_response, 'error') and citers_response.error:
+            logger.error(f"Error retrieving citer details: {citers_response.error}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve citer details")
+        
+        citers_data = citers_response.data
+        
+        # Create a dictionary for quick lookup of citer details
+        citers_dict = {citer["id"]: citer for citer in citers_data}
+        
+        # Format the response to include only the requested fields
+        formatted_citers = []
+        for user_citer in user_citers_data:
+            citer_id = user_citer["citer_id"]
+            if citer_id in citers_dict:
+                citer = citers_dict[citer_id]
+                formatted_citers.append({
+                    "citer_id": citer_id,
+                    "semantic_scholar_id": citer["semantic_scholar_id"],
+                    "papers": user_citer["papers"],
+                    "total_citations": user_citer["total_citations"],
+                    "citer_name": citer["citer_name"],
+                    "paper_count": citer["paper_count"]
+                })
+        
+        return formatted_citers
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Exception retrieving user citers: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving user citers: {str(e)}")
+
+@router.get("/{citer_id}/individual_citer")
+async def get_current_user_citer(
+    citer_id: str,
+    current_user=Depends(get_current_user)
+):
+    """
+    Get information about a specific citer for the current authenticated user
+    
+    Returns detailed information about the relationship between the current user and the specified citer
+    """
+    try:
+        user_id = current_user["id"]
+        
+        # First check if this citer is associated with the current user
+        user_citer_response = supabase.table("user_citers")\
+            .select("*")\
+            .eq("user_id", user_id)\
+            .eq("citer_id", citer_id)\
+            .execute()
+        
+        if hasattr(user_citer_response, 'error') and user_citer_response.error:
+            logger.error(f"Error retrieving user citer relationship: {user_citer_response.error}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve user-citer relationship")
+        
+        user_citer_data = user_citer_response.data
+        
+        if not user_citer_data:
+            raise HTTPException(status_code=404, detail="Citer not found for this user")
+        
+        user_citer = user_citer_data[0]
+        
+        # Get citer details from citers table
+        citer_response = supabase.table("citers")\
+            .select("*")\
+            .eq("id", citer_id)\
+            .execute()
+        
+        if hasattr(citer_response, 'error') and citer_response.error:
+            logger.error(f"Error retrieving citer details: {citer_response.error}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve citer details")
+        
+        citer_data = citer_response.data
+        
+        if not citer_data:
+            raise HTTPException(status_code=404, detail="Citer not found")
+        
+        citer = citer_data[0]
+        
+        # Combine the data from both tables
+        result = {
+            "citer_id": citer_id,
+            "semantic_scholar_id": citer["semantic_scholar_id"],
+            "papers": user_citer["papers"],
+            "total_citations": user_citer["total_citations"],
+            "citer_name": citer["citer_name"],
+            "paper_count": citer["paper_count"]
+        }
+        
+        return result
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Exception retrieving citer information: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving citer information: {str(e)}") 

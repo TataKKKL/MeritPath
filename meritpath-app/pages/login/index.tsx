@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useCitationStore } from '@/store/citationStore';
 
 interface LoginPageProps {
   user: User | null;
@@ -22,6 +23,8 @@ export default function LoginPage({ user: initialUser }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  
+  const resetState = useCitationStore(state => state.resetState);
   
   async function logIn() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -56,6 +59,10 @@ export default function LoginPage({ user: initialUser }: LoginPageProps) {
       console.error(error);
       return;
     }
+    
+    // Reset the citation store state when logging out
+    resetState();
+    
     setEmail('');
     setPassword('');
     router.push('/login');

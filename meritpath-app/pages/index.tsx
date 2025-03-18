@@ -11,13 +11,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ExternalLink } from "lucide-react";
 import { Paper } from '@/types/paper';
 import { HomeProps } from '@/types/props';
+import { useCitationStore } from '@/store/citationStore';
 
 const Home = ({ user, userProfile }: HomeProps) => {
   const [showDialog, setShowDialog] = useState(false);
   const [profile, setProfile] = useState(userProfile);
-  const [citersProcessingStatus, setCitersProcessingStatus] = useState<'not_started' | 'processing' | 'done'>('not_started');
-  const [isEligibleForCitationAnalysis, setIsEligibleForCitationAnalysis] = useState(false);
   const supabase = createClient();
+  
+  // Use the Zustand store instead of local state
+  const { 
+    citersProcessingStatus, 
+    isEligibleForCitationAnalysis,
+    setCitersProcessingStatus,
+    setIsEligibleForCitationAnalysis,
+    checkCitersStatus
+  } = useCitationStore();
 
   useEffect(() => {
     // If user is logged in and has no semantic_scholar_id, show the dialog
@@ -34,94 +42,72 @@ const Home = ({ user, userProfile }: HomeProps) => {
     if (profile && profile.author_paper_count && profile.author_paper_count < 10) {
       setIsEligibleForCitationAnalysis(true);
     }
-  }, [profile]);
+  }, [profile, setIsEligibleForCitationAnalysis]);
 
-  // Add this to your component with the existing useEffect hooks
-
-// Track processing status with subscription
-useEffect(() => {
-  // Only setup subscription if we have a user profile
-  if (!profile || !profile.id) return;
-  
-  console.log('Setting up Supabase subscription for user:', profile.id);
-  
-  // Keep track of job statuses
-  const jobStatuses = new Map();
-  
-  // Subscribe to changes in the jobs table for this user
-  const subscription = supabase
-    .channel('job-status-changes')
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'jobs',
-        filter: `user_id=eq.${profile.id}`,
-      },
-      (payload) => {
-        // Log all payloads to verify subscription is working
-        console.log('Received payload from Supabase:', payload);
-        
-        // Only interested in find_citers jobs
-        if (payload.new.job_type === 'find_citers') {
-          console.log('Found find_citers job update:', {
-            oldStatus: payload.old.status,
-            newStatus: payload.new.status,
-            jobId: payload.new.id
-          });
+  // Track processing status with subscription
+  useEffect(() => {
+    // Only setup subscription if we have a user profile
+    if (!profile || !profile.id) return;
+    
+    console.log('Setting up Supabase subscription for user:', profile.id);
+    
+    // Keep track of job statuses
+    const jobStatuses = new Map();
+    
+    // Subscribe to changes in the jobs table for this user
+    const subscription = supabase
+      .channel('job-status-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'jobs',
+          filter: `user_id=eq.${profile.id}`,
+        },
+        (payload) => {
+          // Log all payloads to verify subscription is working
+          console.log('Received payload from Supabase:', payload);
           
-          const jobId = payload.new.id;
-          const newStatus = payload.new.status;
-          
-          // If a job has changed to success or failed
-          if (newStatus === 'success' || newStatus === 'failed') {
-            console.log('Job completed with status:', newStatus);
-            setCitersProcessingStatus('done');
+          // Only interested in find_citers jobs
+          if (payload.new.job_type === 'find_citers') {
+            console.log('Found find_citers job update:', {
+              oldStatus: payload.old.status,
+              newStatus: payload.new.status,
+              jobId: payload.new.id
+            });
+            
+            const jobId = payload.new.id;
+            const newStatus = payload.new.status;
+            
+            // If a job has changed to success or failed
+            if (newStatus === 'success' || newStatus === 'failed') {
+              console.log('Job completed with status:', newStatus);
+              setCitersProcessingStatus('done');
+            }
+            
+            // Store the current status for future reference
+            jobStatuses.set(jobId, newStatus);
           }
-          
-          // Store the current status for future reference
-          jobStatuses.set(jobId, newStatus);
         }
-      }
-    )
-    .subscribe((status) => {
-      console.log('Subscription status:', status);
-    });
-  
-  // Clean up subscription when component unmounts
-  return () => {
-    console.log('Cleaning up Supabase subscription');
-    subscription.unsubscribe();
-  };
-}, [profile, supabase]);
+      )
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+      });
+    
+    // Clean up subscription when component unmounts
+    return () => {
+      console.log('Cleaning up Supabase subscription');
+      subscription.unsubscribe();
+    };
+  }, [profile, supabase, setCitersProcessingStatus]);
 
   useEffect(() => {
     // Check if citers have already been extracted when user and profile are available
-    const checkCitersExtracted = async () => {
-      if (user && profile?.semantic_scholar_id) {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          
-          if (session?.access_token) {
-            const response = await makeApiAuthRequest(
-              session.access_token,
-              `/api/users/${user.id}/job_done`,
-              { method: 'GET' }
-            );
-            
-            if (response && response.job_done) {
-              setCitersProcessingStatus('done');
-            }
-          }
-        } catch (error) {
-          console.error('Error checking if citers were extracted:', error);
-        }
-      }
-    };
-    
-    checkCitersExtracted();
-  }, [user, profile, supabase.auth]);
+    if (user && profile?.semantic_scholar_id) {
+      checkCitersStatus(user.id);
+    }
+  }, [user, profile, checkCitersStatus]);
 
   const handleSuccess = async () => {
     // Refresh the profile data after updating using the API

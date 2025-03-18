@@ -101,7 +101,7 @@ export default function Citers({ citers}: CitersListProps) {
               <CardContent className="pt-6">
                 <div className="flex items-center space-x-2">
                   <div className="h-4 w-4 rounded-full bg-green-500"></div>
-                  <p>Here&apos;s the list of your citers data.</p>
+                  <p className="text-green-700">Here&apos;s the list of your citers data.</p>
                 </div>
               </CardContent>
             </Card>
@@ -238,23 +238,29 @@ export default function Citers({ citers}: CitersListProps) {
             </Card>
           </>
         ) : (
-          <Card className="bg-amber-50 border-amber-200">
+          <Card className={
+            citersProcessingStatus === 'processing' 
+              ? "bg-amber-50 border-amber-200" 
+              : citersProcessingStatus === 'not_started'
+                ? "bg-gray-50 border-gray-200"
+                : "bg-red-50 border-red-200"
+          }>
             <CardContent className="pt-6">
               <div className="flex items-center space-x-2">
                 {citersProcessingStatus === 'processing' ? (
                   <>
                     <div className="h-4 w-4 rounded-full bg-amber-500 animate-pulse"></div>
-                    <p>We&apos;re currently analyzing your citation network. This may take a few minutes.</p>
+                    <p className="text-amber-700">We&apos;re currently analyzing your citation network. This may take a few minutes.</p>
                   </>
                 ) : citersProcessingStatus === 'not_started' ? (
                   <>
                     <div className="h-4 w-4 rounded-full bg-gray-500"></div>
-                    <p>Citation analysis has not started yet.</p>
+                    <p className="text-gray-700">Citation analysis has not started yet.</p>
                   </>
                 ) : (
                   <>
                     <div className="h-4 w-4 rounded-full bg-red-500"></div>
-                    <p>There was an issue processing your citation data. Please try again later.</p>
+                    <p className="text-red-700">There was an issue processing your citation data. Please try again later.</p>
                   </>
                 )}
               </div>

@@ -193,28 +193,50 @@ const Home = ({ user, userProfile }: HomeProps) => {
 
 
           {/* Citation analysis eligibility section */}
-          <Card className="mt-6">
+          <Card className={
+            citersProcessingStatus === 'done' 
+              ? "mt-6 bg-green-50 border-green-200" 
+              : citersProcessingStatus === 'processing'
+                ? "mt-6 bg-amber-50 border-amber-200"
+                : "mt-6"
+          }>
             <CardHeader className="text-center">
               <CardTitle>Citation Analysis</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
               {citersProcessingStatus === 'done' ? (
-                <Button
-                  variant="outline"
-                  className="mt-3"
-                  asChild
-                >
-                  <Link href="/citers">View Analysis Results</Link>
-                </Button>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-center space-x-2 mb-4">
+                    <div className="h-4 w-4 rounded-full bg-green-500"></div>
+                    <p className="text-green-700">
+                      Your citation analysis is complete!
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="mt-3"
+                    asChild
+                  >
+                    <Link href="/citers">View Analysis Results</Link>
+                  </Button>
+                </div>
               ) : isEligibleForCitationAnalysis ? (
                 citersProcessingStatus === 'processing' ? (
-                  <Button
-                    disabled={true}
-                    size="lg"
-                    variant="secondary"
-                  >
-                    Processing...
-                  </Button>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-center space-x-2 mb-4">
+                      <div className="h-4 w-4 rounded-full bg-amber-500 animate-pulse"></div>
+                      <p className="text-amber-700">
+                        We&apos;re currently analyzing your citation network. This may take a few minutes.
+                      </p>
+                    </div>
+                    <Button
+                      disabled={true}
+                      size="lg"
+                      variant="secondary"
+                    >
+                      Processing...
+                    </Button>
+                  </div>
                 ) : (
                   <Button
                     onClick={handleAnalyzeCiters}

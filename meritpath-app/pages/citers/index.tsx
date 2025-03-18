@@ -25,7 +25,6 @@ interface CiterData {
   citer_name: string;
   paper_count: number;
   total_citations: number;
-  papers: Record<string, string[]>;
 }
 
 // Add a User interface for type safety

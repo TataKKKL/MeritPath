@@ -189,10 +189,6 @@ async def get_user_citers(
     total_citations, citer_name, and paper_count
     """
     try:
-        # Optional: Add authorization check if needed
-        # if current_user["id"] != user_id:
-        #     raise HTTPException(status_code=403, detail="Not authorized to access this user's citers")
-        
         # Query user_citers table for this user
         user_citers_response = supabase.table("user_citers").select("*").eq("user_id", user_id).execute()
         
@@ -209,32 +205,45 @@ async def get_user_citers(
         # Get all citer_ids
         citer_ids = [item["citer_id"] for item in user_citers_data]
         
-        # Get citer details from citers table
-        citers_response = supabase.table("citers").select("*").in_("id", citer_ids).execute()
+        # Create a dictionary for quick lookup of user_citer data
+        user_citers_dict = {item["citer_id"]: item for item in user_citers_data}
         
-        if hasattr(citers_response, 'error') and citers_response.error:
-            logger.error(f"Error retrieving citer details: {citers_response.error}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve citer details")
-        
-        citers_data = citers_response.data
-        
-        # Create a dictionary for quick lookup of citer details
-        citers_dict = {citer["id"]: citer for citer in citers_data}
-        
-        # Format the response to include only the requested fields
+        # Get citer details in batches to avoid exceeding query limits
+        BATCH_SIZE = 50
         formatted_citers = []
-        for user_citer in user_citers_data:
-            citer_id = user_citer["citer_id"]
-            if citer_id in citers_dict:
-                citer = citers_dict[citer_id]
-                formatted_citers.append({
-                    "citer_id": citer_id,
-                    "semantic_scholar_id": citer["semantic_scholar_id"],
-                    "papers": user_citer["papers"],
-                    "total_citations": user_citer["total_citations"],
-                    "citer_name": citer["citer_name"],
-                    "paper_count": citer["paper_count"]
-                })
+        
+        for i in range(0, len(citer_ids), BATCH_SIZE):
+            batch_ids = citer_ids[i:i+BATCH_SIZE]
+            
+            # Get citer details from citers table for this batch
+            citers_response = supabase.table("citers").select("*").in_("id", batch_ids).execute()
+            
+            if hasattr(citers_response, 'error') and citers_response.error:
+                logger.error(f"Error retrieving citer details batch {i//BATCH_SIZE}: {citers_response.error}")
+                continue  # Skip this batch but continue with others
+            
+            citers_data = citers_response.data
+            
+            # Process this batch of citers
+            for citer in citers_data:
+                citer_id = citer["id"]
+                user_citer = user_citers_dict.get(citer_id)
+                
+                if user_citer:
+                    try:
+                        # Add sanitization and validation for each field
+                        formatted_citer = {
+                            "citer_id": str(citer_id),
+                            "semantic_scholar_id": str(citer.get("semantic_scholar_id", "")),
+                            "total_citations": int(user_citer.get("total_citations", 0)),
+                            "citer_name": str(citer.get("citer_name", "")),
+                            "paper_count": int(citer.get("paper_count", 0))
+                        }
+                        formatted_citers.append(formatted_citer)
+                    except (ValueError, TypeError) as e:
+                        # Log the problematic data but continue processing other citers
+                        logger.warning(f"Skipping citer {citer_id} due to data conversion error: {str(e)}")
+                        continue
         
         return formatted_citers
             

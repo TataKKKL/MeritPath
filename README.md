@@ -22,3 +22,25 @@ This architecture provides several advantages:
 - Independent scaling for different workload types
 - High availability through AWS managed services
 - Fault isolation between components
+
+
+### Supabase Integration
+
+For real-time updates and job tracking, we implemented Supabase subscriptions that:
+
+1. **Track Job Status**: We created tables in Supabase to store job information and results, allowing us to track the status of jobs as they move through the system.
+
+2. **Real-time Updates**: On the detail page for each job, we set up a Supabase subscription that listens for changes to job records, enabling the UI to update in real-time as job status changes.
+
+3. **Simplified Architecture**: By using Supabase subscriptions, we eliminated the need for webhook callbacks or continuous polling, reducing complexity and improving the user experience.
+
+
+This architecture provides several advantages:
+- Separation of concerns between immediate request handling and background processing
+- Independent scaling for different workload types
+- High availability through AWS managed services
+- Fault isolation between components
+- Real-time updates through Supabase subscriptions
+
+
+### Database Design

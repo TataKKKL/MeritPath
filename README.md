@@ -1,11 +1,11 @@
 # MeritPath
 
-## System Architecture
+## 1. System Architecture
 ![System Architecture Diagram](docs/static/img/architecture.png)
 
 Our system uses a containerized architecture built on AWS ECS for scalable processing of both synchronous requests and asynchronous tasks.
 
-### Components
+### 1.1 Components
 
 - **ECS Cluster**: Contains our containerized services
  - **Backend Service**: Handles API requests, data validation, and business logic. Auto-scales based on CPU/memory usage to maintain responsiveness during traffic spikes.
@@ -24,7 +24,7 @@ This architecture provides several advantages:
 - Fault isolation between components
 
 
-### Supabase Integration
+### 1.2 Supabase Integration
 
 For real-time updates and job tracking, we implemented Supabase subscriptions that:
 
@@ -43,4 +43,28 @@ This architecture provides several advantages:
 - Real-time updates through Supabase subscriptions
 
 
-### Database Design
+## 2. Database Design
+Our database is structured to efficiently store and query citation data while supporting asynchronous processing:
+
+### Core Tables
+- **users**: Stores registered users with their Semantic Scholar IDs and basic metrics
+- **papers**: Contains academic paper metadata with unique Semantic Scholar identifiers
+- **citers**: Tracks researchers who have cited our users' papers
+- **citations**: Represents direct paper-to-paper citation relationships
+
+### Relationship Tables
+- **user_papers**: Links users to the papers they've authored
+- **user_citers**: Associates users with researchers who cite their work
+- **citer_citations**: Connects citers with the specific citations they've made
+
+### Processing Tables
+- **jobs**: Tracks background processing tasks with their current status
+- **job_results**: Stores the outcome of completed jobs for retrieval
+
+This normalized design provides several advantages:
+- **Efficient Querying**: Direct relationships between entities allow for precise data retrieval
+- **Memory Optimization**: Information is stored in the database as it's processed rather than kept in memory
+- **Incremental Processing**: Paper-by-paper processing enables controlled memory usage for large datasets
+- **Real-time Updates**: Through Supabase subscriptions, the frontend receives immediate notifications when job statuses change
+
+The database schema supports both the immediate needs of the application and future expansion as we add more complex citation analysis features.

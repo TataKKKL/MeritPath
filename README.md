@@ -26,7 +26,7 @@ Our system uses a containerized architecture built on AWS ECS for scalable proce
 
 - **SQS Queue**: Enables asynchronous communication between services, allowing the Backend Service to offload intensive tasks to the Worker Service.
 
-- **Frontend Applications**: React-based web applications that interact with our system through the Backend Service API.
+- **Frontend Applications**: NextJS-based web applications that interact with our system through the Backend Service API.
 
 ### Database Architecture
 

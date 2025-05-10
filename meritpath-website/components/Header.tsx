@@ -12,12 +12,12 @@ const Header = () => {
         <a href="#features" className="text-gray-600 hover:text-blue-600">Features</a>
         <a href="#testimonials" className="text-gray-600 hover:text-blue-600">Testimonials</a>
         <a href="#pricing" className="text-gray-600 hover:text-blue-600">Pricing</a>
-        <Link href="/login">
+        <Link href="https://meritpath-app.pathon.ai/login">
           <Button variant="outline" className="border-blue-600 text-blue-600 hover:bg-blue-50">
             Log in
           </Button>
         </Link>
-        <Link href="/login">
+        <Link href="https://meritpath-app.pathon.ai/login">
           <Button className="bg-blue-600 hover:bg-blue-700 text-white">
             Sign up
           </Button>

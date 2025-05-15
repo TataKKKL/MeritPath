@@ -39,7 +39,7 @@ class WorkerService:
         Process messages from the queue
         """
         try:
-            messages = await self.sqs_client.receive_messages(max_messages=5, wait_time=20, visibility_timeout=300)
+            messages = await self.sqs_client.receive_messages(max_messages=5, wait_time=1, visibility_timeout=300)
             
             if not messages:
                 logger.debug("No messages received")

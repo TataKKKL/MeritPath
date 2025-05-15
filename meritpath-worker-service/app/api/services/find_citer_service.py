@@ -223,7 +223,7 @@ class FindCiterService:
                 
                 # Only update if a new citation was added
                 if citation_added:
-                    # Calculate cited_papers_count and citing_users_count
+                    # Calculate cited_papers_count and citing_papers_count
                     cited_papers_count = len(existing_papers.keys())
                     
                     # Count unique citing papers
@@ -232,13 +232,13 @@ class FindCiterService:
                         for paper in citing_papers_list:
                             unique_citing_papers.add(paper)
                     
-                    citing_users_count = len(unique_citing_papers)
+                    citing_papers_count = len(unique_citing_papers)
                     
                     self.supabase.table("user_citers").update({
                         "papers": existing_papers,
                         "total_citations": total_citations,
                         "cited_papers_count": cited_papers_count,
-                        "citing_users_count": citing_users_count,
+                        "citing_papers_count": citing_papers_count,
                         "updated_at": "now()"
                     }).eq("id", user_citer_id).execute()
             else:
@@ -250,7 +250,7 @@ class FindCiterService:
                     "papers": papers,
                     "total_citations": 1,
                     "cited_papers_count": 1,
-                    "citing_users_count": 1,
+                    "citing_papers_count": 1,
                     "location": None,
                     "affiliations": None
                 }).execute()
@@ -262,7 +262,7 @@ class FindCiterService:
     
     def update_citation_counts(self, user_id):
         """
-        Update the cited_papers_count and citing_users_count columns for all user_citers entries.
+        Update the cited_papers_count and citing_papers_count columns for all user_citers entries.
         Using individual updates instead of a custom SQL function.
         """
         try:
@@ -289,12 +289,12 @@ class FindCiterService:
                     for paper in citing_papers_list:
                         unique_citing_papers.add(paper)
                 
-                citing_users_count = len(unique_citing_papers)
+                citing_papers_count = len(unique_citing_papers)
                 
                 # Update the record
                 self.supabase.table("user_citers").update({
                     "cited_papers_count": cited_papers_count,
-                    "citing_users_count": citing_users_count
+                    "citing_papers_count": citing_papers_count
                 }).eq("id", citer_id).execute()
             
             return True

@@ -222,9 +222,22 @@ class FindCiterService:
                 
                 # Only update if a new citation was added
                 if citation_added:
+                    # Calculate cited_papers_count and citing_users_count
+                    cited_papers_count = len(existing_papers.keys())
+                    
+                    # Count unique citing papers
+                    unique_citing_papers = set()
+                    for citing_papers_list in existing_papers.values():
+                        for paper in citing_papers_list:
+                            unique_citing_papers.add(paper)
+                    
+                    citing_users_count = len(unique_citing_papers)
+                    
                     self.supabase.table("user_citers").update({
                         "papers": existing_papers,
                         "total_citations": total_citations,
+                        "cited_papers_count": cited_papers_count,
+                        "citing_users_count": citing_users_count,
                         "updated_at": "now()"
                     }).eq("id", user_citer_id).execute()
             else:
@@ -234,7 +247,11 @@ class FindCiterService:
                     "user_id": user_id,
                     "citer_id": citer_id,
                     "papers": papers,
-                    "total_citations": 1
+                    "total_citations": 1,
+                    "cited_papers_count": 1,
+                    "citing_users_count": 1,
+                    "location": None,
+                    "affiliations": None
                 }).execute()
             
             return True

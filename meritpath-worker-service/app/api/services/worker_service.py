@@ -1,7 +1,6 @@
 import json
 import logging
 import asyncio
-import uuid
 from app.lib.sqs import SQSClient
 from app.api.services.number_printer_service import NumberPrinterService
 from app.api.services.supabase_service import SupabaseService
@@ -10,55 +9,94 @@ from app.api.services.find_citer_service import FindCiterService
 logger = logging.getLogger(__name__)
 
 class WorkerService:
-    def __init__(self):
+    def __init__(self, max_concurrent_jobs=10):
         self.sqs_client = SQSClient()
         self.number_printer_service = NumberPrinterService()
         self.supabase_service = SupabaseService()
         self.find_citer_service = FindCiterService()
         self.running = False
+        self.max_concurrent_jobs = max_concurrent_jobs
+        self.active_tasks = set()
     
     async def start(self):
         """
-        Start the worker service
+        Start the worker service with true concurrency
         """
         self.running = True
-        logger.info("Worker service started")
+        logger.info(f"Worker service started with max_concurrent_jobs={self.max_concurrent_jobs}")
         
         while self.running:
-            await self.process_messages()
+            # Only poll for new messages if we have capacity
+            if len(self.active_tasks) < self.max_concurrent_jobs:
+                try:
+                    await self.poll_messages()
+                except Exception as e:
+                    logger.error(f"Error polling messages: {str(e)}")
+                    await asyncio.sleep(1)
+            
+            # Clean up completed tasks
+            self.cleanup_tasks()
+            
+            # Short delay to prevent CPU spinning
+            await asyncio.sleep(0.1)
+    
+    def cleanup_tasks(self):
+        """Remove completed tasks from the active set"""
+        done_tasks = {task for task in self.active_tasks if task.done()}
+        self.active_tasks -= done_tasks
+        
+        # Check for exceptions in completed tasks
+        for task in done_tasks:
+            if task.exception():
+                logger.error(f"Task failed with exception: {task.exception()}")
     
     async def stop(self):
         """
         Stop the worker service
         """
         self.running = False
+        logger.info("Worker service stopping...")
+        
+        # Wait for all active tasks to complete (with timeout)
+        if self.active_tasks:
+            try:
+                await asyncio.wait_for(asyncio.gather(*self.active_tasks, return_exceptions=True), timeout=10.0)
+            except asyncio.TimeoutError:
+                logger.warning("Timeout waiting for tasks to complete during shutdown")
+        
         logger.info("Worker service stopped")
     
-    async def process_messages(self):
+    async def poll_messages(self):
         """
-        Process messages from the queue
+        Poll for messages and start processing them without waiting
         """
-        try:
-            messages = await self.sqs_client.receive_messages(max_messages=5, wait_time=1, visibility_timeout=300)
+        # Calculate how many messages we can process
+        capacity = self.max_concurrent_jobs - len(self.active_tasks)
+        if capacity <= 0:
+            return
+        
+        # Limit batch size to our available capacity
+        batch_size = min(capacity, 10)  # SQS max batch size is 10
+        
+        messages = await self.sqs_client.receive_messages(max_messages=batch_size, wait_time=1, visibility_timeout=300)
+        
+        if not messages:
+            return
+        
+        logger.info(f"Received {len(messages)} messages, starting tasks immediately")
+        
+        # Start a new task for each message and add to active tasks
+        for message in messages:
+            # Create task that runs independently
+            task = asyncio.create_task(self.process_message(message))
+            self.active_tasks.add(task)
             
-            if not messages:
-                logger.debug("No messages received")
-                # Add a small delay when no messages are found to prevent CPU spinning
-                await asyncio.sleep(0.5)
-                return
-            
-            logger.info(f"Received {len(messages)} messages")
-            
-            for message in messages:
-                await self.process_message(message)
-        except Exception as e:
-            logger.error(f"Error in process_messages: {str(e)}")
-            # Add delay on error to prevent CPU spinning
-            await asyncio.sleep(1)
+            # Add callback to clean up when done (alternative to periodic cleanup)
+            task.add_done_callback(lambda t: self.active_tasks.discard(t) if t in self.active_tasks else None)
     
     async def process_message(self, message):
         """
-        Process a single message
+        Process a single message completely independently
         """
         receipt_handle = message.get('ReceiptHandle')
         job_id = None
@@ -66,7 +104,6 @@ class WorkerService:
         try:
             # Get message body
             body_raw = message.get('Body', '{}')
-            logger.info(f"Received raw message: {body_raw}")
             
             # Try to parse as JSON
             try:
@@ -77,16 +114,16 @@ class WorkerService:
                 await self.sqs_client.delete_message(receipt_handle)
                 return
             
-            logger.info(f"Processing message: {body}")
-            
             # Extract job parameters
             job_id = body.get('job_id')
             if job_id:
-                job_id = str(job_id).lower()  # Ensure lowercase UUID
+                job_id = str(job_id).lower()
             else:
                 logger.warning("Message missing job_id, skipping")
                 await self.sqs_client.delete_message(receipt_handle)
                 return
+            
+            logger.info(f"Starting job {job_id}")
             
             job_type = body.get('job_type')
             job_params = body.get('job_params', {})
@@ -136,7 +173,7 @@ class WorkerService:
                         "error": "Missing required parameter: user_id"
                     }
                 else:
-                    # Process the job
+                    # Process the job - this will be non-blocking since each job runs in its own task
                     result = await self.number_printer_service.print_numbers(end_number)
             elif job_type == 'find_citers':
                 # Handle the citation processing job
@@ -146,13 +183,13 @@ class WorkerService:
                         "error": "Missing required parameter: user_id"
                     }
                 else:
-                    # Process the citation job
+                    # Process the citation job - this will be non-blocking since each job runs in its own task
                     result = await self.find_citer_service.process_citation_job(user_id)
             else:
                 logger.warning(f"Unknown job type: {job_type}")
                 result = {"status": "failed", "error": f"Unknown job type: {job_type}"}
             
-            logger.info(f"Job result: {result}")
+            logger.info(f"Job {job_id} completed with result: {result}")
             
             # Update job status and save result
             status = result.get('status', 'unknown')
@@ -162,7 +199,7 @@ class WorkerService:
             await self.sqs_client.delete_message(receipt_handle)
             
         except Exception as e:
-            logger.error(f"Error processing message: {str(e)}")
+            logger.error(f"Error processing message for job {job_id}: {str(e)}")
             # Update job status to 'failed' if we have a job_id
             if job_id:
                 await self.supabase_service.update_job_status(job_id, 'failed', {"error": str(e)})

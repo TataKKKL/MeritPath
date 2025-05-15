@@ -1,3 +1,4 @@
+
 import asyncio
 import logging
 from app.api.services.worker_service import WorkerService
@@ -14,7 +15,8 @@ async def start_worker_service():
     global worker_service, worker_task
     
     if worker_service is None:
-        worker_service = WorkerService()
+        # Create a worker with higher concurrency 
+        worker_service = WorkerService(max_concurrent_jobs=20)
     
     if worker_task is None or worker_task.done():
         # Create a new background task that doesn't block startup
@@ -40,16 +42,16 @@ async def stop_worker_service():
     global worker_service, worker_task
     
     if worker_service:
-        worker_service.running = False
         logger.info("Worker service stopping...")
+        await worker_service.stop()
     
     if worker_task and not worker_task.done():
         # Give it a moment to clean up
         try:
-            await asyncio.wait_for(worker_task, timeout=2.0)
+            await asyncio.wait_for(worker_task, timeout=5.0)
         except asyncio.TimeoutError:
             # If it doesn't stop gracefully, cancel the task
             worker_task.cancel()
             logger.info("Worker service task cancelled")
     
-    logger.info("Worker service stopped") 
+    logger.info("Worker service stopped")

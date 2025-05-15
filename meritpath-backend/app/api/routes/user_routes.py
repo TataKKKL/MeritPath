@@ -237,7 +237,9 @@ async def get_user_citers(
                             "semantic_scholar_id": str(citer.get("semantic_scholar_id", "")),
                             "total_citations": int(user_citer.get("total_citations", 0)),
                             "citer_name": str(citer.get("citer_name", "")),
-                            "paper_count": int(citer.get("paper_count", 0))
+                            "paper_count": int(citer.get("paper_count", 0)),
+                            "cited_papers_count": int(user_citer.get("cited_papers_count", 0)),
+                            "citing_papers_count": int(user_citer.get("citing_papers_count", 0))
                         }
                         formatted_citers.append(formatted_citer)
                     except (ValueError, TypeError) as e:

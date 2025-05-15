@@ -238,6 +238,9 @@ async def get_user_citers(
                             "total_citations": int(user_citer.get("total_citations", 0)),
                             "citer_name": str(citer.get("citer_name", "")),
                             "paper_count": int(citer.get("paper_count", 0)),
+                            "location": str(citer.get("location", "")),
+                            "affiliations": str(citer.get("affiliations", "")),
+                            "selected": user_citer.get("selected", False),
                             "cited_papers_count": int(user_citer.get("cited_papers_count", 0)),
                             "citing_papers_count": int(user_citer.get("citing_papers_count", 0))
                         }
@@ -313,7 +316,10 @@ async def get_current_user_citer(
             "papers": user_citer["papers"],
             "total_citations": user_citer["total_citations"],
             "citer_name": citer["citer_name"],
+            "location": citer["location"],
+            "affiliations": citer["affiliations"],
             "paper_count": citer["paper_count"],
+            "selected": user_citer["selected"],
             "cited_papers_count": user_citer["cited_papers_count"],
             "citing_papers_count": user_citer["citing_papers_count"]
         }

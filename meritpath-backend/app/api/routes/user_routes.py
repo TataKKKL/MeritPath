@@ -283,6 +283,7 @@ async def get_current_user_citer(
             raise HTTPException(status_code=404, detail="Citer not found for this user")
         
         user_citer = user_citer_data[0]
+        print(user_citer)
         
         # Get citer details from citers table
         citer_response = supabase.table("citers")\
@@ -300,6 +301,8 @@ async def get_current_user_citer(
             raise HTTPException(status_code=404, detail="Citer not found")
         
         citer = citer_data[0]
+        print(citer)
+        # 'cited_papers_count': 4, 'citing_users_count': 8
         
         # Combine the data from both tables
         result = {
@@ -308,7 +311,9 @@ async def get_current_user_citer(
             "papers": user_citer["papers"],
             "total_citations": user_citer["total_citations"],
             "citer_name": citer["citer_name"],
-            "paper_count": citer["paper_count"]
+            "paper_count": citer["paper_count"],
+            "cited_papers_count": user_citer["cited_papers_count"],
+            "citing_papers_count": user_citer["citing_papers_count"]
         }
         
         return result

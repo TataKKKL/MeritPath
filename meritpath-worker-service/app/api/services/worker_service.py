@@ -147,7 +147,7 @@ class WorkerService:
                     }
                 else:
                     # Process the citation job
-                    result = self.find_citer_service.process_citation_job(user_id)
+                    result = await self.find_citer_service.process_citation_job(user_id)
             else:
                 logger.warning(f"Unknown job type: {job_type}")
                 result = {"status": "failed", "error": f"Unknown job type: {job_type}"}

@@ -5,6 +5,7 @@ import time
 from requests.exceptions import HTTPError, RequestException
 from app.lib.supabase import supabase
 from fastapi import APIRouter, HTTPException
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -397,7 +398,7 @@ class FindCiterService:
         
         return True
     
-    def process_citation_job(self, user_id):
+    async def process_citation_job(self, user_id):
         """
         Process a citation job for a user.
         Memory-efficient version that updates the database directly.
@@ -408,6 +409,24 @@ class FindCiterService:
         Returns:
             A dictionary with the job result
         """
+        try:
+            # Run the synchronous processing in a thread pool executor to avoid blocking
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(
+                None,  # Use the default executor
+                self._process_citation_job_sync,  # Pass the method
+                user_id  # Pass the argument
+            )
+            return result
+        except Exception as e:
+            logger.error(f"Error in async wrapper for process_citation_job: {e}")
+            return {
+                "status": "failed",
+                "error": str(e)
+            }
+
+    def _process_citation_job_sync(self, user_id):
+        """Internal synchronous implementation of the citation job processing"""
         try:
             # Get the semantic_scholar_id from the database
             response = self.supabase.table("users").select("semantic_scholar_id").eq("id", user_id).execute()

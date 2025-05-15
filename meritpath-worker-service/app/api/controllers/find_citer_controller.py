@@ -9,5 +9,5 @@ class FindCiterController:
         """
         Execute the find citer service and return the result.
         """
-        result = self.find_citer_service.process_citation_job(user_id)
+        result = await self.find_citer_service.process_citation_job(user_id)
         return result 

@@ -140,6 +140,99 @@ async def update_semantic_scholar_id(
         raise HTTPException(status_code=500, detail=f"Error updating Semantic Scholar ID: {str(e)}")
 
 
+@router.get("/{user_id}/papers")
+async def get_user_papers(
+    user_id: str,
+    current_user=Depends(get_current_user)
+):
+    """
+    Get all papers associated with a user (authenticated endpoint)
+    
+    Returns a list of papers with their details including title, year, and citation count
+    """
+    try:
+        # Query user_papers table for papers of this user
+        user_papers_response = supabase.table("user_papers").select("*").eq("user_id", user_id).execute()
+        
+        if hasattr(user_papers_response, 'error') and user_papers_response.error:
+            logger.error(f"Error retrieving user papers: {user_papers_response.error}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve user papers")
+        
+        user_papers_data = user_papers_response.data
+        
+        if not user_papers_data:
+            # Return empty list if no papers found
+            return []
+        
+        # Get all paper_ids
+        paper_ids = [item["paper_id"] for item in user_papers_data]
+        
+        # Get paper details in batches
+        BATCH_SIZE = 50
+        papers_dict = {}
+        
+        for i in range(0, len(paper_ids), BATCH_SIZE):
+            batch_ids = paper_ids[i:i+BATCH_SIZE]
+            
+            # Get paper details from papers table for this batch
+            papers_response = supabase.table("papers").select("*").in_("id", batch_ids).execute()
+            
+            if hasattr(papers_response, 'error') and papers_response.error:
+                logger.error(f"Error retrieving paper details batch {i//BATCH_SIZE}: {papers_response.error}")
+                continue  # Skip this batch but continue with others
+            
+            papers_data = papers_response.data
+            
+            # Add papers to dictionary
+            for paper in papers_data:
+                papers_dict[paper["id"]] = paper
+        
+        # Get citation counts for each paper
+        paper_citation_counts = defaultdict(int)
+        
+        for i in range(0, len(paper_ids), BATCH_SIZE):
+            batch_ids = paper_ids[i:i+BATCH_SIZE]
+            
+            # Get citations for this batch of papers
+            citations_response = supabase.table("citations").select("cited_paper_id").in_("cited_paper_id", batch_ids).execute()
+            
+            if hasattr(citations_response, 'error') and citations_response.error:
+                logger.error(f"Error retrieving citations for batch {i//BATCH_SIZE}: {citations_response.error}")
+                continue  # Skip this batch but continue with others
+            
+            # Count citations for each paper
+            for citation in citations_response.data:
+                cited_paper_id = citation.get("cited_paper_id")
+                if cited_paper_id:
+                    paper_citation_counts[cited_paper_id] += 1
+        
+        # Format papers with citation counts
+        formatted_papers = []
+        for paper_id in paper_ids:
+            paper = papers_dict.get(paper_id)
+            
+            if paper:
+                try:
+                    formatted_paper = {
+                        "id": str(paper_id),
+                        "semantic_scholar_id": str(paper.get("semantic_scholar_id", "")),
+                        "title": str(paper.get("title", "")),
+                        "year": int(paper.get("year", 0)),
+                        "citation_count": paper_citation_counts.get(paper_id, 0)
+                    }
+                    formatted_papers.append(formatted_paper)
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Skipping paper {paper_id} due to data conversion error: {str(e)}")
+                    continue
+        
+        return formatted_papers
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Exception retrieving user papers: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving user papers: {str(e)}")
+
 
 @router.get("/{user_id}/job_done")
 async def check_job_done(

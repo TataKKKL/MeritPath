@@ -1,11 +1,10 @@
 import logging
 from requests import Session
 import s2
-from collections import defaultdict
 import time
 from requests.exceptions import HTTPError, RequestException
 from app.lib.supabase import supabase
-from app.api.routes.find_citer import update_citation_tables
+from fastapi import APIRouter, HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -13,10 +12,12 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 
+# Create a router for API endpoints
+router = APIRouter()
+
 class FindCiterService:
     def __init__(self):
         self.supabase = supabase
-        self.update_citation_tables = update_citation_tables
     
     def api_call_with_retry(self, func, *args, **kwargs):
         """Wrapper function to retry API calls with exponential backoff."""
@@ -30,11 +31,6 @@ class FindCiterService:
                 wait_time = RETRY_DELAY * (2 ** attempt)
                 logger.info(f"API Error: {e}. Retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
-    
-    def get_author_details(self, author_id, target_author_id, session):
-        """Fetch author details including paper count."""
-        papers = self.get_author_papers(author_id, session)
-        return {"paper_count": len(papers)}
     
     def get_author_papers(self, author_id, session):
         """Fetch papers for a given author ID from Semantic Scholar using PyS2."""
@@ -120,14 +116,13 @@ class FindCiterService:
                 
         return None
     
-    def _get_or_create_citer(self, citer_data):
+    def _get_or_create_citer(self, author_data, paper_count=0):
         """
         Get a citer by Semantic Scholar ID or create it if it doesn't exist.
         Returns the citer ID.
         """
-        semantic_scholar_id = citer_data.get("authorId")
-        name = citer_data.get("name")
-        paper_count = citer_data.get("paper_count", 0)
+        semantic_scholar_id = author_data.get("authorId")
+        name = author_data.get("name")
         
         if not semantic_scholar_id or not name:
             return None
@@ -143,7 +138,6 @@ class FindCiterService:
             self.supabase.table("citers").update({
                 "citer_name": name,
                 "paper_count": paper_count
-                # No total_citations field in the actual schema
             }).eq("id", citer_id).execute()
             
             return citer_id
@@ -153,7 +147,6 @@ class FindCiterService:
                 "semantic_scholar_id": semantic_scholar_id,
                 "citer_name": name,
                 "paper_count": paper_count
-                # No total_citations field in the actual schema
             }
             
             insert_response = self.supabase.table("citers").insert(insert_data).execute()
@@ -197,46 +190,157 @@ class FindCiterService:
             
         return True
     
-    def find_my_citers(self, semantic_scholar_id, user_id):
+    def _update_user_citer_papers(self, user_id, citer_id, cited_paper_title, citing_paper_title):
         """
-        Find authors who have cited the given author's papers.
-        This updated version stores data in the normalized tables as it's processed.
+        Update the user_citers table with a new citation.
+        Does not store citation data in memory.
+        """
+        try:
+            # Check if relationship exists
+            user_citer_response = self.supabase.table("user_citers").select("id, papers, total_citations").eq("user_id", user_id).eq("citer_id", citer_id).execute()
+            
+            if user_citer_response.data and len(user_citer_response.data) > 0:
+                # Update existing relationship
+                user_citer_id = user_citer_response.data[0].get("id")
+                existing_papers = user_citer_response.data[0].get("papers", {})
+                total_citations = user_citer_response.data[0].get("total_citations", 0)
+                
+                # Convert to dict if it's not already
+                if not isinstance(existing_papers, dict):
+                    existing_papers = {}
+                
+                # Update papers dict
+                if cited_paper_title not in existing_papers:
+                    existing_papers[cited_paper_title] = []
+                
+                # Add citing paper if not already present
+                citation_added = False
+                if citing_paper_title not in existing_papers[cited_paper_title]:
+                    existing_papers[cited_paper_title].append(citing_paper_title)
+                    total_citations += 1
+                    citation_added = True
+                
+                # Only update if a new citation was added
+                if citation_added:
+                    # Calculate cited_papers_count and citing_users_count
+                    cited_papers_count = len(existing_papers.keys())
+                    
+                    # Count unique citing papers
+                    unique_citing_papers = set()
+                    for citing_papers_list in existing_papers.values():
+                        for paper in citing_papers_list:
+                            unique_citing_papers.add(paper)
+                    
+                    citing_users_count = len(unique_citing_papers)
+                    
+                    self.supabase.table("user_citers").update({
+                        "papers": existing_papers,
+                        "total_citations": total_citations,
+                        "cited_papers_count": cited_papers_count,
+                        "citing_users_count": citing_users_count,
+                        "updated_at": "now()"
+                    }).eq("id", user_citer_id).execute()
+            else:
+                # Create new relationship
+                papers = {cited_paper_title: [citing_paper_title]}
+                self.supabase.table("user_citers").insert({
+                    "user_id": user_id,
+                    "citer_id": citer_id,
+                    "papers": papers,
+                    "total_citations": 1,
+                    "cited_papers_count": 1,
+                    "citing_users_count": 1,
+                    "location": None,
+                    "affiliations": None
+                }).execute()
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error updating user_citer relationship: {e}")
+            return False
+    
+    def update_citation_counts(self, user_id):
+        """
+        Update the cited_papers_count and citing_users_count columns for all user_citers entries.
+        Using individual updates instead of a custom SQL function.
+        """
+        try:
+            # Get all user_citers entries for this user
+            user_citers_response = self.supabase.table("user_citers").select("id, papers").eq("user_id", user_id).execute()
+            
+            if not user_citers_response.data:
+                return True
+                
+            # Update each entry individually
+            for entry in user_citers_response.data:
+                citer_id = entry.get("id")
+                papers = entry.get("papers", {})
+                
+                if not papers:
+                    continue
+                    
+                # Count cited papers (keys in the papers object)
+                cited_papers_count = len(papers.keys())
+                
+                # Count unique citing papers (values in the papers object)
+                unique_citing_papers = set()
+                for citing_papers_list in papers.values():
+                    for paper in citing_papers_list:
+                        unique_citing_papers.add(paper)
+                
+                citing_users_count = len(unique_citing_papers)
+                
+                # Update the record
+                self.supabase.table("user_citers").update({
+                    "cited_papers_count": cited_papers_count,
+                    "citing_users_count": citing_users_count
+                }).eq("id", citer_id).execute()
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error updating citation counts: {e}")
+            return False
+    
+    def process_user_papers(self, semantic_scholar_id, user_id):
+        """
+        Memory-efficient version that directly updates the database without storing large data structures.
         
         Args:
             semantic_scholar_id: The Semantic Scholar ID of the author
             user_id: The database user ID
             
         Returns:
-            A list of authors who have cited the given author's papers, sorted by citation count
+            Success flag
         """
         session = Session()
-        your_papers = self.get_author_papers(semantic_scholar_id, session)
         
-        # Still keep track of citation details for backward compatibility
-        citation_details = {}
-        citation_years = []
+        # Get all the user's papers
+        your_papers = self.get_author_papers(semantic_scholar_id, session)
         total_papers = len(your_papers)
         processed_papers = 0
         
         logger.info(f"Processing {total_papers} papers for author {semantic_scholar_id}")
         
-        # Process all author's papers and store them in the database
+        # Process each paper
         for paper in your_papers:
             try:
-                # Step 2.2: Store the paper in the database
+                # Store the paper in the database
                 paper_id = self._get_or_create_paper(paper)
+                paper_title = paper.get("title", "Unknown")
                 
                 if paper_id:
                     # Link the paper to the user
                     self._link_user_paper(user_id, paper_id)
                     
                     # Fetch citations for this paper
-                    citations = self.get_citations(paper["paperId"], session)
-                    logger.info(f"Processing paper: {paper['title']} - Found {len(citations)} citations")
+                    citations = self.get_citations(paper.get("paperId"), session)
+                    logger.info(f"Processing paper: {paper_title} - Found {len(citations)} citations")
                     
-                    # Step 2.3: Process each citation
+                    # Process each citation
                     for citation in citations:
                         if "paperId" in citation:
+                            citation_title = citation.get("title", "Unknown")
+                            
                             # Store the citing paper
                             citing_paper_id = self._get_or_create_paper(citation)
                             
@@ -245,44 +349,34 @@ class FindCiterService:
                                 citation_id = self._create_citation(paper_id, citing_paper_id)
                                 
                                 # Get authors of the citing paper
-                                authors = self.get_paper_authors(citation["paperId"], session)
+                                authors = self.get_paper_authors(citation.get("paperId"), session)
                                 
-                                # Step 2.4: Process each author as a potential citer
+                                # Process each author as a potential citer
                                 for author in authors:
                                     author_name = author.get("name")
                                     author_id = author.get("authorId")
                                     
                                     if author_name and author_id:
-                                        # Get author details including paper count
-                                        author_details = self.get_author_details(author_id, semantic_scholar_id, session)
-                                        author["paper_count"] = author_details["paper_count"]
-                                        
+                                        # Skip if this is the user themselves
+                                        if author_id == semantic_scholar_id:
+                                            continue
+                                            
                                         try:
+                                            # Get an estimate of the author's paper count
+                                            paper_count_estimate = len(self.get_author_papers(author_id, session))
+                                            
                                             # Store or update citer
-                                            citer_id = self._get_or_create_citer(author)
+                                            citer_id = self._get_or_create_citer(author, paper_count_estimate)
                                             
                                             if citer_id and citation_id:
                                                 # Link citer to citation
                                                 self._link_citer_citation(citer_id, citation_id)
+                                                
+                                                # Update user_citer relationship directly in the database
+                                                self._update_user_citer_papers(user_id, citer_id, paper_title, citation_title)
                                         except Exception as e:
                                             logger.error(f"Error processing citer {author_name}: {e}")
                                             continue
-                                        
-                                        # For backward compatibility, also track the citation details
-                                        if author_name not in citation_details:
-                                            citation_details[author_name] = {
-                                                "authorId": author_id,
-                                                "papers": {},
-                                                "paper_count": author_details["paper_count"]
-                                            }
-                                        
-                                        if paper["title"] not in citation_details[author_name]["papers"]:
-                                            citation_details[author_name]["papers"][paper["title"]] = []
-                                        
-                                        citation_details[author_name]["papers"][paper["title"]].append(citation["title"])
-                            
-                            if citation.get("year"):
-                                citation_years.append(citation["year"])
                 
                 processed_papers += 1
                 logger.info(f"Processed paper {processed_papers} of {total_papers}")
@@ -290,23 +384,7 @@ class FindCiterService:
                 logger.error(f"Error processing paper {paper.get('title', 'unknown')}: {e}")
                 continue
         
-        # For backward compatibility, prepare the sorted citation data
-        sorted_citation_data = []
-        for author, data in citation_details.items():
-            papers = data["papers"]
-            total_citations = sum(len(citing_papers) for citing_papers in papers.values())
-            
-            sorted_citation_data.append({
-                "author_name": author,
-                "semantic_scholar_id": data["authorId"],
-                "total_citations": total_citations,
-                "papers": dict(papers),
-                "paper_count": data["paper_count"],
-            })
-        
-        sorted_citation_data.sort(key=lambda item: item["total_citations"], reverse=True)
-        
-        # Update the user's paper count. The error shows that 'updated_at' doesn't exist in users table
+        # Update the user's paper count
         try:
             self.supabase.table("users").update({
                 "author_paper_count": total_papers
@@ -314,119 +392,15 @@ class FindCiterService:
         except Exception as e:
             logger.error(f"Error updating user paper count: {e}")
         
-        return sorted_citation_data, citation_years
+        # Update the citation counts in user_citers table
+        self.update_citation_counts(user_id)
+        
+        return True
     
-    async def update_citation_tables(self, user_id, sorted_citation_data):
-        """
-        Update the user_citers table with the citation data for backward compatibility.
-        The main citation data is already stored in the normalized tables during processing.
-        
-        Args:
-            user_id: The user ID in the database
-            sorted_citation_data: List of citation data for authors who cited the user
-        """
-        try:
-            # Process in batches to reduce memory usage
-            batch_size = 50
-            total_citers = len(sorted_citation_data)
-            
-            for i in range(0, total_citers, batch_size):
-                batch = sorted_citation_data[i:i+batch_size]
-                
-                # Process each citing author in the current batch
-                for citer_data in batch:
-                    citer_semantic_scholar_id = citer_data.get("semantic_scholar_id")
-                    citer_name = citer_data.get("author_name")
-                    total_citations = citer_data.get("total_citations")
-                    paper_count = citer_data.get("paper_count")
-                    papers = citer_data.get("papers", {})
-                    
-                    # Check if citer already exists in citers table
-                    citer_response = self.supabase.table("citers").select("id").eq("semantic_scholar_id", citer_semantic_scholar_id).execute()
-                    
-                    citer_id = None
-                    if citer_response.data and len(citer_response.data) > 0:
-                        citer_id = citer_response.data[0].get("id")
-                    
-                    # If we have a valid citer_id, update the user_citers table for backward compatibility
-                    if citer_id:
-                        # Check if this user-citer relationship already exists
-                        user_citer_response = self.supabase.table("user_citers").select("id").eq("user_id", user_id).eq("citer_id", citer_id).execute()
-                        
-                        # We now need to convert the papers structure to match what the existing database expects
-                        # Based on the error logs, we need to modify this to match the actual schema
-                        
-                        # If relationship exists, update it
-                        if user_citer_response.data and len(user_citer_response.data) > 0:
-                            user_citer_id = user_citer_response.data[0].get("id")
-                            
-                            # Use the format expected by the existing schema
-                            update_data = {
-                                "total_cites": total_citations
-                            }
-                            
-                            # Create a cited_papers_citing_papers structure if the schema expects it
-                            if "cited_papers_citing_papers" in sorted_citation_data[0]:
-                                update_data["cited_papers_citing_papers"] = papers
-                            else:
-                                # From the error logs and your SQL, it appears the schema might actually be paper_title/citing_paper_title
-                                # Let's handle both cases by flattening the papers structure if needed
-                                flattened_citations = []
-                                for cited_paper, citing_papers in papers.items():
-                                    for citing_paper in citing_papers:
-                                        flattened_citations.append({
-                                            "paper_title": cited_paper,
-                                            "citing_paper_title": citing_paper
-                                        })
-                                
-                                if flattened_citations:
-                                    # If we need to update individual rows, do that instead
-                                    for citation in flattened_citations:
-                                        self.supabase.table("user_citers").upsert({
-                                            "user_id": user_id,
-                                            "citer_id": citer_id,
-                                            "paper_title": citation["paper_title"],
-                                            "citing_paper_title": citation["citing_paper_title"]
-                                        }).execute()
-                                else:
-                                    # Just update the existing record
-                                    self.supabase.table("user_citers").update(update_data).eq("id", user_citer_id).execute()
-                        # If relationship doesn't exist, insert it based on the schema
-                        else:
-                            # Check if we need to insert flattened citation records
-                            flattened_citations = []
-                            for cited_paper, citing_papers in papers.items():
-                                for citing_paper in citing_papers:
-                                    flattened_citations.append({
-                                        "user_id": user_id,
-                                        "citer_id": citer_id,
-                                        "paper_title": cited_paper,
-                                        "citing_paper_title": citing_paper
-                                    })
-                            
-                            if flattened_citations:
-                                # Insert individual citation records
-                                for citation in flattened_citations:
-                                    self.supabase.table("user_citers").insert(citation).execute()
-                            else:
-                                # Insert a single record with the papers structure
-                                self.supabase.table("user_citers").insert({
-                                    "user_id": user_id,
-                                    "citer_id": citer_id,
-                                    "cited_papers_citing_papers": {
-                                        "cited_papers": papers
-                                    },
-                                    "total_cites": total_citations
-                                }).execute()
-            
-            return True
-        except Exception as e:
-            logger.error(f"Error updating citation tables: {e}")
-            return False
-        
-    async def process_citation_job(self, user_id):
+    def process_citation_job(self, user_id):
         """
         Process a citation job for a user.
+        Memory-efficient version that updates the database directly.
         
         Args:
             user_id: The user ID in the database
@@ -452,18 +426,23 @@ class FindCiterService:
                     "error": f"User with ID {user_id} does not have a Semantic Scholar ID"
                 }
             
-            # Find citers and store data in normalized tables
-            sorted_citation_data, citation_years = self.find_my_citers(semantic_scholar_id, user_id)
+            # Process papers and update database directly
+            processing_success = self.process_user_papers(semantic_scholar_id, user_id)
             
-            # Update user_citers table for backward compatibility
-            update_success = await self.update_citation_tables(user_id, sorted_citation_data)
+            # Get citation count for reporting
+            citation_count_response = self.supabase.table("user_citers").select("total_citations").eq("user_id", user_id).execute()
+                
+            citation_count = 0
+            if citation_count_response.data:
+                for row in citation_count_response.data:
+                    citation_count += row.get("total_citations", 0)
             
             return {
                 "status": "success",
                 "user_id": user_id,
                 "semantic_scholar_id": semantic_scholar_id,
-                "database_updated": update_success,
-                "citation_count": len(sorted_citation_data)
+                "database_updated": processing_success,
+                "citation_count": citation_count
             }
         except Exception as e:
             logger.error(f"Error processing citation job: {e}")
@@ -472,3 +451,4 @@ class FindCiterService:
                 "status": "failed",
                 "error": str(e)
             }
+

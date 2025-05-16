@@ -393,7 +393,29 @@ class FindCiterService:
         
         # Update the citation counts in user_citers table
         self.update_citation_counts(user_id)
+
+        # update whether the citer is independent or not
+        for paper in your_papers:
+            print(f"paper: {paper}")
+            semantic_scholar_id = paper.get("paperId")
+            print(f"semantic_scholar_id: {semantic_scholar_id}")
+            # paper_id = self._get_or_create_paper(paper)
+            authors = self.get_paper_authors(semantic_scholar_id, session)
+            print(f"authors: {authors}")
+
+            for author in authors:
+                author_semantic_scholar_id = author.get("authorId")
+                citer_response = self.supabase.table("citers").select("id").eq("semantic_scholar_id", author_semantic_scholar_id).execute()
         
+                print(citer_response)
+                print("XXXXXXX")
+                if citer_response.data and len(citer_response.data) > 0:
+                    citer_id = citer_response.data[0].get("id")
+                    print(citer_id, user_id)
+                    self.supabase.table("user_citers").update({
+                        "independent": False
+                    }).eq("citer_id", citer_id).eq("user_id", user_id).execute()
+
         return True
     
     async def process_citation_job(self, user_id):

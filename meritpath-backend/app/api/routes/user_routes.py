@@ -335,7 +335,8 @@ async def get_user_citers(
                             "affiliations": str(citer.get("affiliations", "")),
                             "selected": user_citer.get("selected", False),
                             "cited_papers_count": int(user_citer.get("cited_papers_count", 0)),
-                            "citing_papers_count": int(user_citer.get("citing_papers_count", 0))
+                            "citing_papers_count": int(user_citer.get("citing_papers_count", 0)),
+                            "independent": user_citer.get("independent", True)
                         }
                         formatted_citers.append(formatted_citer)
                     except (ValueError, TypeError) as e:
@@ -414,7 +415,8 @@ async def get_current_user_citer(
             "paper_count": citer["paper_count"],
             "selected": user_citer["selected"],
             "cited_papers_count": user_citer["cited_papers_count"],
-            "citing_papers_count": user_citer["citing_papers_count"]
+            "citing_papers_count": user_citer["citing_papers_count"],
+            "independent": user_citer["independent"]
         }
         
         return result

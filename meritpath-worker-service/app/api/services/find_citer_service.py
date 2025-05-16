@@ -191,9 +191,9 @@ class FindCiterService:
             
         return True
     
-    def _update_user_citer_papers(self, user_id, citer_id, cited_paper_title, citing_paper_title):
+    def _update_user_citer_papers(self, user_id, citer_id, cited_paper_title, cited_paper_id, citing_paper_title, citing_paper_id):
         """
-        Update the user_citers table with a new citation.
+        Update the user_citers table with a new citation using the new format.
         Does not store citation data in memory.
         """
         try:
@@ -210,16 +210,53 @@ class FindCiterService:
                 if not isinstance(existing_papers, dict):
                     existing_papers = {}
                 
-                # Update papers dict
+                # Check if this is old format and convert if needed
+                if existing_papers and any(isinstance(v, list) for v in existing_papers.values()):
+                    # Convert old format to new format
+                    new_papers = {}
+                    for old_cited_title, old_citing_titles in existing_papers.items():
+                        # Try to find paper_id for cited paper
+                        cited_paper_resp = self.supabase.table("papers").select("id").eq("title", old_cited_title).execute()
+                        old_cited_paper_id = cited_paper_resp.data[0].get("id") if cited_paper_resp.data else None
+                        
+                        new_papers[old_cited_title] = {
+                            "paper_id": old_cited_paper_id,
+                            "citations": []
+                        }
+                        
+                        for old_citing_title in old_citing_titles:
+                            # Try to find paper_id for citing paper
+                            citing_paper_resp = self.supabase.table("papers").select("id").eq("title", old_citing_title).execute()
+                            old_citing_paper_id = citing_paper_resp.data[0].get("id") if citing_paper_resp.data else None
+                            
+                            new_papers[old_cited_title]["citations"].append({
+                                "citing_paper_id": old_citing_paper_id,
+                                "title": old_citing_title
+                            })
+                    
+                    existing_papers = new_papers
+                
+                # Update papers dict with new citation
                 if cited_paper_title not in existing_papers:
-                    existing_papers[cited_paper_title] = []
+                    existing_papers[cited_paper_title] = {
+                        "paper_id": cited_paper_id,
+                        "citations": []
+                    }
+                
+                # Check if this citation already exists
+                citation_added = True
+                for citation in existing_papers[cited_paper_title]["citations"]:
+                    if citation.get("citing_paper_id") == citing_paper_id:
+                        citation_added = False
+                        break
                 
                 # Add citing paper if not already present
-                citation_added = False
-                if citing_paper_title not in existing_papers[cited_paper_title]:
-                    existing_papers[cited_paper_title].append(citing_paper_title)
+                if citation_added:
+                    existing_papers[cited_paper_title]["citations"].append({
+                        "citing_paper_id": citing_paper_id,
+                        "title": citing_paper_title
+                    })
                     total_citations += 1
-                    citation_added = True
                 
                 # Only update if a new citation was added
                 if citation_added:
@@ -228,9 +265,9 @@ class FindCiterService:
                     
                     # Count unique citing papers
                     unique_citing_papers = set()
-                    for citing_papers_list in existing_papers.values():
-                        for paper in citing_papers_list:
-                            unique_citing_papers.add(paper)
+                    for paper_data in existing_papers.values():
+                        for citation in paper_data.get("citations", []):
+                            unique_citing_papers.add(citation.get("citing_paper_id"))
                     
                     citing_papers_count = len(unique_citing_papers)
                     
@@ -242,8 +279,19 @@ class FindCiterService:
                         "updated_at": "now()"
                     }).eq("id", user_citer_id).execute()
             else:
-                # Create new relationship
-                papers = {cited_paper_title: [citing_paper_title]}
+                # Create new relationship with new format
+                papers = {
+                    cited_paper_title: {
+                        "paper_id": cited_paper_id,
+                        "citations": [
+                            {
+                                "citing_paper_id": citing_paper_id,
+                                "title": citing_paper_title
+                            }
+                        ]
+                    }
+                }
+                
                 self.supabase.table("user_citers").insert({
                     "user_id": user_id,
                     "citer_id": citer_id,
@@ -261,7 +309,7 @@ class FindCiterService:
     def update_citation_counts(self, user_id):
         """
         Update the cited_papers_count and citing_papers_count columns for all user_citers entries.
-        Using individual updates instead of a custom SQL function.
+        Updated to handle the new papers format.
         """
         try:
             # Get all user_citers entries for this user
@@ -277,17 +325,31 @@ class FindCiterService:
                 
                 if not papers:
                     continue
+                
+                # Check if this is old format
+                if any(isinstance(v, list) for v in papers.values()):
+                    # Count cited papers (keys in the papers object)
+                    cited_papers_count = len(papers.keys())
                     
-                # Count cited papers (keys in the papers object)
-                cited_papers_count = len(papers.keys())
-                
-                # Count unique citing papers (values in the papers object)
-                unique_citing_papers = set()
-                for citing_papers_list in papers.values():
-                    for paper in citing_papers_list:
-                        unique_citing_papers.add(paper)
-                
-                citing_papers_count = len(unique_citing_papers)
+                    # Count unique citing papers (values in the papers object)
+                    unique_citing_papers = set()
+                    for citing_papers_list in papers.values():
+                        for paper in citing_papers_list:
+                            unique_citing_papers.add(paper)
+                    
+                    citing_papers_count = len(unique_citing_papers)
+                else:
+                    # Count cited papers (keys in the papers object)
+                    cited_papers_count = len(papers.keys())
+                    
+                    # Count unique citing papers from the new format
+                    unique_citing_papers = set()
+                    for paper_data in papers.values():
+                        for citation in paper_data.get("citations", []):
+                            if citation.get("citing_paper_id"):
+                                unique_citing_papers.add(citation.get("citing_paper_id"))
+                    
+                    citing_papers_count = len(unique_citing_papers)
                 
                 # Update the record
                 self.supabase.table("user_citers").update({
@@ -372,7 +434,15 @@ class FindCiterService:
                                                 self._link_citer_citation(citer_id, citation_id)
                                                 
                                                 # Update user_citer relationship directly in the database
-                                                self._update_user_citer_papers(user_id, citer_id, paper_title, citation_title)
+                                                # Updated to include paper IDs
+                                                self._update_user_citer_papers(
+                                                    user_id,
+                                                    citer_id,
+                                                    paper_title,
+                                                    paper_id,
+                                                    citation_title,
+                                                    citing_paper_id
+                                                )
                                         except Exception as e:
                                             logger.error(f"Error processing citer {author_name}: {e}")
                                             continue

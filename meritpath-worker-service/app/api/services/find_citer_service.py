@@ -251,8 +251,6 @@ class FindCiterService:
                     "total_citations": 1,
                     "cited_papers_count": 1,
                     "citing_papers_count": 1,
-                    "location": None,
-                    "affiliations": None
                 }).execute()
             
             return True

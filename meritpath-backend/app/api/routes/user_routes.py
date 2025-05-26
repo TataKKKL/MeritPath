@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from app.middleware.auth import get_current_user
 from app.lib.supabase import supabase
 from pydantic import BaseModel
@@ -12,6 +12,7 @@ from requests import Session
 import s2
 import time
 from requests.exceptions import HTTPError, RequestException
+from typing import Optional
 
 
 MAX_RETRIES = 3
@@ -425,4 +426,225 @@ async def get_current_user_citer(
         raise
     except Exception as e:
         logger.error(f"Exception retrieving citer information: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error retrieving citer information: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error retrieving citer information: {str(e)}")
+
+@router.get("/{user_id}/citers/advanced")
+async def get_user_citers_advanced(
+    user_id: str,
+    current_user=Depends(get_current_user),
+    # Pagination parameters
+    page: int = Query(1, ge=1, description="Current page number"),
+    limit: int = Query(10, ge=1, le=100, description="Items per page"),
+    offset: Optional[int] = Query(None, ge=0, description="Alternative to page"),
+    
+    # Search parameters
+    search: Optional[str] = Query(None, max_length=100, description="Search term"),
+    search_field: str = Query("citer_name", description="Field to search in"),
+    
+    # Sorting parameters
+    sort_by: str = Query("total_citations", description="Field to sort by"),
+    sort_order: str = Query("desc", regex="^(asc|desc)$", description="Sort direction"),
+    
+    # Filtering parameters
+    independent: Optional[bool] = Query(None, description="Filter by independent status"),
+    min_citations: Optional[int] = Query(None, ge=0, description="Minimum citations"),
+    max_citations: Optional[int] = Query(None, ge=0, description="Maximum citations"),
+    min_papers: Optional[int] = Query(None, ge=0, description="Minimum papers published"),
+    max_papers: Optional[int] = Query(None, ge=0, description="Maximum papers published"),
+    location: Optional[str] = Query(None, max_length=100, description="Filter by location")
+):
+    """
+    Get all citers associated with a user with advanced filtering, sorting, and pagination
+    
+    Supports comprehensive search, filtering, and sorting capabilities for citers
+    """
+    try:
+        # Validate sort field
+        VALID_SORT_FIELDS = [
+            'citer_name', 'paper_count', 'total_citations', 
+            'cited_papers_count', 'citing_papers_count', 'independent'
+        ]
+        
+        if sort_by not in VALID_SORT_FIELDS:
+            raise HTTPException(status_code=400, detail=f"Invalid sort field. Must be one of: {VALID_SORT_FIELDS}")
+        
+        # Validate search field
+        VALID_SEARCH_FIELDS = ['citer_name', 'location', 'affiliations']
+        if search_field not in VALID_SEARCH_FIELDS:
+            raise HTTPException(status_code=400, detail=f"Invalid search field. Must be one of: {VALID_SEARCH_FIELDS}")
+        
+        # Calculate pagination
+        if offset is not None:
+            start = offset
+            current_page = (offset // limit) + 1
+        else:
+            start = (page - 1) * limit
+            current_page = page
+        
+        end = start + limit - 1
+        
+        # Build the base query for user_citers
+        user_citers_query = supabase.table("user_citers").select("*").eq("user_id", user_id)
+        
+        # Apply filters to user_citers table
+        if independent is not None:
+            user_citers_query = user_citers_query.eq("independent", independent)
+        
+        if min_citations is not None:
+            user_citers_query = user_citers_query.gte("total_citations", min_citations)
+        
+        if max_citations is not None:
+            user_citers_query = user_citers_query.lte("total_citations", max_citations)
+        
+        if min_papers is not None:
+            user_citers_query = user_citers_query.gte("citing_papers_count", min_papers)
+        
+        if max_papers is not None:
+            user_citers_query = user_citers_query.lte("citing_papers_count", max_papers)
+        
+        # Get total count for pagination (before applying range)
+        count_query = user_citers_query
+        count_response = count_query.execute()
+        
+        if hasattr(count_response, 'error') and count_response.error:
+            logger.error(f"Error getting count: {count_response.error}")
+            total_count = 0
+        else:
+            total_count = len(count_response.data)
+        
+        # Apply sorting to user_citers fields
+        if sort_by in ['total_citations', 'cited_papers_count', 'citing_papers_count', 'independent']:
+            ascending = sort_order == 'asc'
+            user_citers_query = user_citers_query.order(sort_by, desc=not ascending)
+        
+        # Apply pagination
+        user_citers_response = user_citers_query.range(start, end).execute()
+        
+        if hasattr(user_citers_response, 'error') and user_citers_response.error:
+            logger.error(f"Error retrieving user citers: {user_citers_response.error}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve user citers")
+        
+        user_citers_data = user_citers_response.data
+        
+        if not user_citers_data:
+            return {
+                "citers": [],
+                "pagination": {
+                    "currentPage": current_page,
+                    "totalPages": 0,
+                    "totalCount": 0,
+                    "pageSize": limit,
+                    "hasNext": False,
+                    "hasPrev": False
+                },
+                "sorting": {
+                    "sortBy": sort_by,
+                    "sortOrder": sort_order
+                }
+            }
+        
+        # Get citer IDs
+        citer_ids = [item["citer_id"] for item in user_citers_data]
+        user_citers_dict = {item["citer_id"]: item for item in user_citers_data}
+        
+        # Get citer details from citers table
+        citers_query = supabase.table("citers").select("*").in_("id", citer_ids)
+        
+        # Apply search and location filters to citers table
+        if search and search_field in ['citer_name', 'location', 'affiliations']:
+            citers_query = citers_query.ilike(search_field, f"%{search}%")
+        
+        if location and search_field != 'location':  # Avoid duplicate location filter
+            citers_query = citers_query.ilike("location", f"%{location}%")
+        
+        citers_response = citers_query.execute()
+        
+        if hasattr(citers_response, 'error') and citers_response.error:
+            logger.error(f"Error retrieving citer details: {citers_response.error}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve citer details")
+        
+        citers_data = citers_response.data
+        
+        # Format citers
+        formatted_citers = []
+        for citer in citers_data:
+            citer_id = citer["id"]
+            user_citer = user_citers_dict.get(citer_id)
+            
+            if user_citer:
+                try:
+                    formatted_citer = {
+                        "citer_id": str(citer_id),
+                        "semantic_scholar_id": str(citer.get("semantic_scholar_id", "")),
+                        "total_citations": int(user_citer.get("total_citations", 0)),
+                        "citer_name": str(citer.get("citer_name", "")),
+                        "paper_count": int(citer.get("paper_count", 0)),
+                        "location": str(citer.get("location", "")),
+                        "affiliations": str(citer.get("affiliations", "")),
+                        "selected": user_citer.get("selected", False),
+                        "cited_papers_count": int(user_citer.get("cited_papers_count", 0)),
+                        "citing_papers_count": int(user_citer.get("citing_papers_count", 0)),
+                        "independent": user_citer.get("independent", True)
+                    }
+                    formatted_citers.append(formatted_citer)
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Skipping citer {citer_id} due to data conversion error: {str(e)}")
+                    continue
+        
+        # Apply sorting for citer table fields
+        if sort_by in ['citer_name', 'paper_count']:
+            reverse = sort_order == 'desc'
+            if sort_by == 'citer_name':
+                formatted_citers.sort(key=lambda x: x['citer_name'].lower(), reverse=reverse)
+            elif sort_by == 'paper_count':
+                formatted_citers.sort(key=lambda x: x['paper_count'], reverse=reverse)
+        
+        # Calculate pagination info
+        total_pages = (total_count + limit - 1) // limit
+        has_next = current_page < total_pages
+        has_prev = current_page > 1
+        
+        # Build filters object for response
+        applied_filters = {}
+        if search:
+            applied_filters["search"] = search
+            applied_filters["searchField"] = search_field
+        if independent is not None:
+            applied_filters["independent"] = independent
+        if min_citations is not None:
+            applied_filters["minCitations"] = min_citations
+        if max_citations is not None:
+            applied_filters["maxCitations"] = max_citations
+        if min_papers is not None:
+            applied_filters["minPapers"] = min_papers
+        if max_papers is not None:
+            applied_filters["maxPapers"] = max_papers
+        if location:
+            applied_filters["location"] = location
+        
+        response = {
+            "citers": formatted_citers,
+            "pagination": {
+                "currentPage": current_page,
+                "totalPages": total_pages,
+                "totalCount": total_count,
+                "pageSize": limit,
+                "hasNext": has_next,
+                "hasPrev": has_prev
+            },
+            "sorting": {
+                "sortBy": sort_by,
+                "sortOrder": sort_order
+            }
+        }
+        
+        if applied_filters:
+            response["filters"] = applied_filters
+        
+        return response
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Exception retrieving user citers: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving user citers: {str(e)}") 

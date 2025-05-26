@@ -447,8 +447,8 @@ async def get_user_citers_advanced(
     
     # Filtering parameters
     independent: Optional[bool] = Query(None, description="Filter by independent status"),
-    min_citations: Optional[int] = Query(None, ge=0, description="Minimum citations"),
-    max_citations: Optional[int] = Query(None, ge=0, description="Maximum citations"),
+    min_citations: Optional[int] = Query(None, ge=0, description="Minimum citations to your work"),
+    max_citations: Optional[int] = Query(None, ge=0, description="Maximum citations to your work"),
     min_papers: Optional[int] = Query(None, ge=0, description="Minimum papers published"),
     max_papers: Optional[int] = Query(None, ge=0, description="Maximum papers published"),
     location: Optional[str] = Query(None, max_length=100, description="Filter by location")
@@ -481,9 +481,7 @@ async def get_user_citers_advanced(
             start = (page - 1) * limit
             current_page = page
         
-        end = start + limit - 1
-        
-        # Build the base query for user_citers
+        # Step 1: Build query for user_citers table (filters that apply to user_citers)
         user_citers_query = supabase.table("user_citers").select("*").eq("user_id", user_id)
         
         # Apply filters to user_citers table
@@ -496,29 +494,8 @@ async def get_user_citers_advanced(
         if max_citations is not None:
             user_citers_query = user_citers_query.lte("total_citations", max_citations)
         
-        if min_papers is not None:
-            user_citers_query = user_citers_query.gte("citing_papers_count", min_papers)
-        
-        if max_papers is not None:
-            user_citers_query = user_citers_query.lte("citing_papers_count", max_papers)
-        
-        # Get total count for pagination (before applying range)
-        count_query = user_citers_query
-        count_response = count_query.execute()
-        
-        if hasattr(count_response, 'error') and count_response.error:
-            logger.error(f"Error getting count: {count_response.error}")
-            total_count = 0
-        else:
-            total_count = len(count_response.data)
-        
-        # Apply sorting to user_citers fields
-        if sort_by in ['total_citations', 'cited_papers_count', 'citing_papers_count', 'independent']:
-            ascending = sort_order == 'asc'
-            user_citers_query = user_citers_query.order(sort_by, desc=not ascending)
-        
-        # Apply pagination
-        user_citers_response = user_citers_query.range(start, end).execute()
+        # Get all user_citers that match the user_citers filters
+        user_citers_response = user_citers_query.execute()
         
         if hasattr(user_citers_response, 'error') and user_citers_response.error:
             logger.error(f"Error retrieving user citers: {user_citers_response.error}")
@@ -543,66 +520,101 @@ async def get_user_citers_advanced(
                 }
             }
         
-        # Get citer IDs
+        # Get citer IDs from filtered user_citers
         citer_ids = [item["citer_id"] for item in user_citers_data]
         user_citers_dict = {item["citer_id"]: item for item in user_citers_data}
         
-        # Get citer details from citers table
-        citers_query = supabase.table("citers").select("*").in_("id", citer_ids)
+        logger.info(f"Processing {len(citer_ids)} citer IDs for user {user_id}")
         
-        # Apply search and location filters to citers table
-        if search and search_field in ['citer_name', 'location', 'affiliations']:
-            citers_query = citers_query.ilike(search_field, f"%{search}%")
+        # Step 2: Process citers in batches to avoid URI length limits
+        BATCH_SIZE = 50  # Reduced batch size to avoid URI length issues
+        combined_citers = []
         
-        if location and search_field != 'location':  # Avoid duplicate location filter
-            citers_query = citers_query.ilike("location", f"%{location}%")
-        
-        citers_response = citers_query.execute()
-        
-        if hasattr(citers_response, 'error') and citers_response.error:
-            logger.error(f"Error retrieving citer details: {citers_response.error}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve citer details")
-        
-        citers_data = citers_response.data
-        
-        # Format citers
-        formatted_citers = []
-        for citer in citers_data:
-            citer_id = citer["id"]
-            user_citer = user_citers_dict.get(citer_id)
+        for i in range(0, len(citer_ids), BATCH_SIZE):
+            batch_ids = citer_ids[i:i+BATCH_SIZE]
             
-            if user_citer:
-                try:
-                    formatted_citer = {
-                        "citer_id": str(citer_id),
-                        "semantic_scholar_id": str(citer.get("semantic_scholar_id", "")),
-                        "total_citations": int(user_citer.get("total_citations", 0)),
-                        "citer_name": str(citer.get("citer_name", "")),
-                        "paper_count": int(citer.get("paper_count", 0)),
-                        "location": str(citer.get("location", "")),
-                        "affiliations": str(citer.get("affiliations", "")),
-                        "selected": user_citer.get("selected", False),
-                        "cited_papers_count": int(user_citer.get("cited_papers_count", 0)),
-                        "citing_papers_count": int(user_citer.get("citing_papers_count", 0)),
-                        "independent": user_citer.get("independent", True)
-                    }
-                    formatted_citers.append(formatted_citer)
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Skipping citer {citer_id} due to data conversion error: {str(e)}")
-                    continue
+            try:
+                # Build query for this batch of citers
+                citers_query = supabase.table("citers").select("*").in_("id", batch_ids)
+                
+                # Apply filters to citers table
+                if min_papers is not None:
+                    citers_query = citers_query.gte("paper_count", min_papers)
+                
+                if max_papers is not None:
+                    citers_query = citers_query.lte("paper_count", max_papers)
+                
+                # Apply search filters to citers table
+                if search and search_field in ['citer_name', 'location', 'affiliations']:
+                    citers_query = citers_query.ilike(search_field, f"%{search}%")
+                
+                if location and search_field != 'location':  # Avoid duplicate location filter
+                    citers_query = citers_query.ilike("location", f"%{location}%")
+                
+                # Apply sorting for citer table fields at database level
+                if sort_by in ['citer_name', 'paper_count']:
+                    ascending = sort_order == 'asc'
+                    citers_query = citers_query.order(sort_by, desc=not ascending)
+                
+                # Get filtered citers for this batch
+                citers_response = citers_query.execute()
+                
+                if hasattr(citers_response, 'error') and citers_response.error:
+                    logger.error(f"Error retrieving citer details batch {i//BATCH_SIZE}: {citers_response.error}")
+                    continue  # Skip this batch but continue with others
+                
+                citers_data = citers_response.data
+                
+                # Process this batch of citers
+                for citer in citers_data:
+                    citer_id = citer["id"]
+                    user_citer = user_citers_dict.get(citer_id)
+                    
+                    if user_citer:
+                        try:
+                            formatted_citer = {
+                                "citer_id": str(citer_id),
+                                "semantic_scholar_id": str(citer.get("semantic_scholar_id", "")),
+                                "total_citations": int(user_citer.get("total_citations", 0)),
+                                "citer_name": str(citer.get("citer_name", "")),
+                                "paper_count": int(citer.get("paper_count", 0)),
+                                "location": str(citer.get("location", "")),
+                                "affiliations": str(citer.get("affiliations", "")),
+                                "selected": user_citer.get("selected", False),
+                                "cited_papers_count": int(user_citer.get("cited_papers_count", 0)),
+                                "citing_papers_count": int(user_citer.get("citing_papers_count", 0)),
+                                "independent": user_citer.get("independent", True)
+                            }
+                            combined_citers.append(formatted_citer)
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"Skipping citer {citer_id} due to data conversion error: {str(e)}")
+                            continue
+                            
+            except Exception as e:
+                logger.error(f"Error processing batch {i//BATCH_SIZE}: {str(e)}")
+                continue  # Skip this batch but continue with others
         
-        # Apply sorting for citer table fields
-        if sort_by in ['citer_name', 'paper_count']:
+        # Step 3: Apply sorting for user_citers fields (in-memory sorting)
+        if sort_by in ['total_citations', 'cited_papers_count', 'citing_papers_count', 'independent']:
             reverse = sort_order == 'desc'
-            if sort_by == 'citer_name':
-                formatted_citers.sort(key=lambda x: x['citer_name'].lower(), reverse=reverse)
-            elif sort_by == 'paper_count':
-                formatted_citers.sort(key=lambda x: x['paper_count'], reverse=reverse)
+            if sort_by == 'total_citations':
+                combined_citers.sort(key=lambda x: x['total_citations'], reverse=reverse)
+            elif sort_by == 'cited_papers_count':
+                combined_citers.sort(key=lambda x: x['cited_papers_count'], reverse=reverse)
+            elif sort_by == 'citing_papers_count':
+                combined_citers.sort(key=lambda x: x['citing_papers_count'], reverse=reverse)
+            elif sort_by == 'independent':
+                combined_citers.sort(key=lambda x: x['independent'], reverse=reverse)
+        
+        # Step 4: Apply pagination to the final combined results
+        total_count = len(combined_citers)
+        end = start + limit
+        paginated_citers = combined_citers[start:end]
         
         # Calculate pagination info
-        total_pages = (total_count + limit - 1) // limit
-        has_next = current_page < total_pages
-        has_prev = current_page > 1
+        total_pages = (total_count + limit - 1) // limit if total_count > 0 else 0
+        has_next = end < total_count
+        has_prev = start > 0
         
         # Build filters object for response
         applied_filters = {}
@@ -623,7 +635,7 @@ async def get_user_citers_advanced(
             applied_filters["location"] = location
         
         response = {
-            "citers": formatted_citers,
+            "citers": paginated_citers,
             "pagination": {
                 "currentPage": current_page,
                 "totalPages": total_pages,

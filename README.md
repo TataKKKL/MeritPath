@@ -32,29 +32,7 @@ Our system uses a containerized architecture built on AWS ECS for scalable proce
 
 Our normalized database schema efficiently stores citation relationships while supporting asynchronous processing workflows:
 
-#### Core Tables
-
-| Table | Purpose | Key Fields |
-|-------|---------|------------|
-| **users** | Registered platform users | id, semantic_scholar_id, name, email |
-| **papers** | Academic publications | id, semantic_scholar_id, title, year |
-| **citers** | Researchers who cite users' work | id, semantic_scholar_id, name, university |
-| **citations** | Paper-to-paper citation relationships | id, cited_paper_id, citing_paper_id |
-
-#### Relationship Tables
-
-| Table | Relationship | Purpose |
-|-------|-------------|---------|
-| **user_papers** | Many-to-many | Links users to papers they've authored |
-| **user_citers** | Many-to-many | Associates users with researchers citing their work |
-| **citer_citations** | Many-to-many | Connects citers with specific citations they've made |
-
-#### Processing Tables
-
-| Table | Purpose | Key Fields |
-|-------|---------|------------|
-| **jobs** | Tracks asynchronous tasks | id, job_type, status, user_id |
-| **job_results** | Stores processing outcomes | id, job_id, result_data |
+to be updated
 
 ### Real-time Updates with Supabase
 
